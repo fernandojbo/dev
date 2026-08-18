@@ -54,7 +54,7 @@
 
         <!-- Rodapé -->
         <div class="mt-6 pt-4 border-t border-slate-700 text-center">
-            <p class="text-xs text-slate-500">Usuários: admin / joao | Senha: 123456</p>
+            <p class="text-xs text-slate-500">Usuários: admin / joao / maria | Senha: 123456</p>
         </div>
     </div>
 
@@ -94,8 +94,12 @@
             try {
                 const dados = JSON.parse(usuarioSalvo);
                 if (dados.usuario) {
-                    // Já está logado, redireciona para conferencia.html
-                    window.location.href = 'conferencia.html';
+                    // Já está logado, redireciona conforme o role
+                    if (dados.role === 'admin') {
+                        window.location.href = 'admin-layout.html';
+                    } else {
+                        window.location.href = 'conferencia.html';
+                    }
                 }
             } catch (e) {}
         }
@@ -130,10 +134,10 @@
                     return;
                 }
 
-                // Busca o usuário no Supabase
+                // Busca o usuário no Supabase (incluindo role)
                 const { data: usuarios, error } = await supabaseClient
                     .from('usuarios')
-                    .select('id, nome, usuario')
+                    .select('id, nome, usuario, role')
                     .eq('usuario', usuario)
                     .eq('senha', senha)
                     .eq('ativo', true)
@@ -156,16 +160,25 @@
                         id: usuarios.id,
                         nome: usuarios.nome,
                         usuario: usuarios.usuario,
+                        role: usuarios.role || 'conferente',
                         login_at: new Date().toISOString()
                     };
                     localStorage.setItem('usuario_logado', JSON.stringify(dadosUsuario));
-                    localStorage.setItem('conferente', JSON.stringify({ nome: usuarios.nome, usuario: usuarios.usuario }));
+                    localStorage.setItem('conferente', JSON.stringify({ 
+                        nome: usuarios.nome, 
+                        usuario: usuarios.usuario,
+                        role: usuarios.role || 'conferente'
+                    }));
 
                     mostrarStatus('✅ Login realizado! Redirecionando...', 'text-green-400');
 
-                    // Redireciona para conferencia.html (NOVO DESTINO!)
+                    // Redireciona conforme o role
                     setTimeout(() => {
-                        window.location.href = 'conferencia.html';
+                        if (dadosUsuario.role === 'admin') {
+                            window.location.href = 'admin-layout.html';
+                        } else {
+                            window.location.href = 'conferencia.html';
+                        }
                     }, 800);
 
                 } else {
@@ -205,7 +218,6 @@
         // ENTER PARA ENVIAR O FORMULÁRIO
         // ==========================================================
 
-        // Pressionar Enter no campo SENHA = submeter o formulário
         senhaInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -213,7 +225,6 @@
             }
         });
 
-        // Pressionar Enter no campo USUÁRIO = ir para o campo SENHA
         usuarioInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
