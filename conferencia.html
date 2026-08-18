@@ -108,7 +108,6 @@
                 
                 // SE FOR ADMIN, REDIRECIONA PARA O PAINEL ADMIN
                 if (dados.role === 'admin') {
-                    // Verifica se já está no admin-layout (para evitar loop)
                     const isInAdmin = window.location.pathname.includes('admin-layout.html') || 
                                       (window.parent && window.parent.location.pathname.includes('admin-layout.html'));
                     if (!isInAdmin) {
@@ -159,8 +158,6 @@
 
         async function salvarLogConferencia(dados) {
             try {
-                console.log('📝 Salvando log:', dados);
-                
                 const { data, error } = await supabaseClient
                     .from('conferencia_log')
                     .insert({
@@ -174,8 +171,6 @@
                 
                 if (error) {
                     console.error('❌ Erro ao salvar log:', error);
-                } else {
-                    console.log('✅ Log salvo com sucesso:', data);
                 }
             } catch (err) {
                 console.error('❌ Erro ao salvar log:', err);
@@ -232,14 +227,12 @@
             inputField.focus();
             if (window.createSupabaseClient && !supabaseClient) inicializarSupabase();
             
-            // Mostra o usuário logado
             const conferente = obterConferente();
             const usuarioElement = document.getElementById('usuario-logado');
             if (usuarioElement) {
                 usuarioElement.textContent = `👤 ${conferente.nome}`;
             }
 
-            // Botão de sair
             const btnSair = document.getElementById('btn-sair');
             if (btnSair) {
                 btnSair.addEventListener('click', function(e) {
@@ -305,37 +298,37 @@
 
                 if (tipo === 'sucesso') {
                     osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                    osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.1);
+                    osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.08);
                     osc2.frequency.setValueAtTime(1320, audioCtx.currentTime);
-                    osc2.frequency.setValueAtTime(1540, audioCtx.currentTime + 0.1);
+                    osc2.frequency.setValueAtTime(1540, audioCtx.currentTime + 0.08);
                     
                     gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
                     gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
                     
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + 0.25);
+                    osc.stop(audioCtx.currentTime + 0.2);
                     osc2.start(audioCtx.currentTime);
-                    osc2.stop(audioCtx.currentTime + 0.25);
+                    osc2.stop(audioCtx.currentTime + 0.2);
                     
                 } else if (tipo === 'erro') {
                     osc.frequency.setValueAtTime(180, audioCtx.currentTime);
-                    osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.15);
-                    osc.frequency.setValueAtTime(180, audioCtx.currentTime + 0.3);
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.1);
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime + 0.2);
                     osc2.frequency.setValueAtTime(120, audioCtx.currentTime);
-                    osc2.frequency.setValueAtTime(100, audioCtx.currentTime + 0.15);
-                    osc2.frequency.setValueAtTime(120, audioCtx.currentTime + 0.3);
+                    osc2.frequency.setValueAtTime(100, audioCtx.currentTime + 0.1);
+                    osc2.frequency.setValueAtTime(120, audioCtx.currentTime + 0.2);
                     
                     gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
                     gain2.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
                     
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + 0.45);
+                    osc.stop(audioCtx.currentTime + 0.35);
                     osc2.start(audioCtx.currentTime);
-                    osc2.stop(audioCtx.currentTime + 0.45);
+                    osc2.stop(audioCtx.currentTime + 0.35);
                     
                 } else {
                     osc.type = 'sine';
@@ -344,19 +337,17 @@
                     osc2.frequency.setValueAtTime(880, audioCtx.currentTime);
                     
                     gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
                     gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
                     
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + 0.12);
+                    osc.stop(audioCtx.currentTime + 0.1);
                     osc2.start(audioCtx.currentTime);
-                    osc2.stop(audioCtx.currentTime + 0.12);
+                    osc2.stop(audioCtx.currentTime + 0.1);
                 }
 
-            } catch (e) {
-                console.log('Erro no áudio:', e);
-            }
+            } catch (e) {}
         }
 
 
@@ -451,7 +442,7 @@
                     matchInfo.classList.remove('hidden');
                     displayMatch.textContent = volumeLido + ' ✅';
 
-                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                    setFeedbackVisual(true, "CONFERIDO", null);
                 } else {
                     // ❌ ERRO
                     const { data: nrExiste } = await supabaseClient
@@ -462,11 +453,11 @@
 
                     let mensagemErro = '';
                     if (!nrExiste) {
-                        mensagemErro = `A NR ${nrLida} não existe na base.`;
-                        setFeedbackVisual(false, "NR NÃO ENCONTRADA", mensagemErro);
+                        mensagemErro = `NR ${nrLida} não existe`;
+                        setFeedbackVisual(false, "NR INVÁLIDA", mensagemErro);
                     } else {
-                        mensagemErro = `O volume ${volumeLido} não está vinculado à NR ${nrLida}.`;
-                        setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR", mensagemErro);
+                        mensagemErro = `Volume ${volumeLido} não pertence à NR ${nrLida}`;
+                        setFeedbackVisual(false, "VOLUME INVÁLIDO", mensagemErro);
                     }
 
                     await salvarLogConferencia({
@@ -480,16 +471,17 @@
 
             } catch (err) {
                 console.error("Erro detalhado no Supabase:", err);
-                setFeedbackVisual(false, "ERRO DE CONSULTA", err.message || "Falha ao buscar dados.");
+                setFeedbackVisual(false, "ERRO", err.message || "Falha ao buscar dados.");
             }
         }
 
 
         /* ==========================================================
-           FEEDBACK VISUAL
+           FEEDBACK VISUAL - OTIMIZADO PARA LEITURA RÁPIDA
            ========================================================== */
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
+            // Cancela timeout anterior
             if (timeoutFeedback) {
                 clearTimeout(timeoutFeedback);
                 timeoutFeedback = null;
@@ -498,13 +490,13 @@
             instructionTitle.textContent = mensagem;
 
             if (sucesso) {
-                appBg.className = "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
-                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all";
+                appBg.className = "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-200";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all duration-200";
                 errorDetails.classList.add('hidden');
                 tocarSom('sucesso');
             } else {
-                appBg.className = "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
-                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all";
+                appBg.className = "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-200";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all duration-200";
                 if (detalheExtra) {
                     displayInfoExtra.textContent = detalheExtra;
                     errorDetails.classList.remove('hidden');
@@ -514,11 +506,12 @@
                 tocarSom('erro');
             }
 
-            const tempoEspera = sucesso ? 2500 : 4500;
+            // TEMPOS REDUZIDOS: 800ms para sucesso, 1200ms para erro
+            const tempoEspera = sucesso ? 800 : 1200;
 
             timeoutFeedback = setTimeout(() => {
-                appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300";
-                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all";
+                appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-200";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-200";
                 instructionTitle.textContent = "Aguardando Leitura...";
                 instructionSub.innerHTML = "Bipe a etiqueta <strong>NR</strong>";
                 displayNr.textContent = "-";
@@ -529,6 +522,9 @@
                 etapa = 1;
                 nrAtual = '';
                 timeoutFeedback = null;
+                
+                // Foca no input após reset
+                inputField.focus();
             }, tempoEspera);
         }
 
