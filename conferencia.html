@@ -95,18 +95,18 @@
         function verificarLogin() {
             const usuarioSalvo = localStorage.getItem('usuario_logado');
             if (!usuarioSalvo) {
-                window.location.href = 'index.html';
+                window.location.href = 'login.html';
                 return null;
             }
             try {
                 const dados = JSON.parse(usuarioSalvo);
                 if (!dados.usuario) {
-                    window.location.href = 'index.html';
+                    window.location.href = 'login.html';
                     return null;
                 }
                 return dados;
             } catch (e) {
-                window.location.href = 'index.html';
+                window.location.href = 'login.html';
                 return null;
             }
         }
@@ -136,7 +136,7 @@
         function logout() {
             localStorage.removeItem('usuario_logado');
             localStorage.removeItem('conferente');
-            window.location.href = 'index.html';
+            window.location.href = 'login.html';
         }
 
         // ==========================================================
