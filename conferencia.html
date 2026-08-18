@@ -76,12 +76,95 @@
     </main>
 
     <!-- Rodapé -->
-    <footer class="p-3 bg-slate-800 text-center text-xs text-slate-400">
-        Status:
-        <span id="connection-status" class="text-yellow-400">Conectando ao Supabase...</span>
+    <footer class="p-3 bg-slate-800 text-center text-xs text-slate-400 flex justify-between items-center">
+        <span>Status: <span id="connection-status" class="text-yellow-400">Conectando ao Supabase...</span></span>
+        <div class="flex items-center gap-4">
+            <span id="usuario-logado" class="text-amber-400">👤 -</span>
+            <button id="btn-sair" class="text-red-400 hover:text-red-300 text-xs font-semibold transition-colors">
+                Sair
+            </button>
+        </div>
     </footer>
 
     <script>
+
+        // ==========================================================
+        // PROTEÇÃO DE ACESSO - VERIFICA SE O USUÁRIO ESTÁ LOGADO
+        // ==========================================================
+
+        function verificarLogin() {
+            const usuarioSalvo = localStorage.getItem('usuario_logado');
+            if (!usuarioSalvo) {
+                window.location.href = 'login.html';
+                return null;
+            }
+            try {
+                const dados = JSON.parse(usuarioSalvo);
+                if (!dados.usuario) {
+                    window.location.href = 'login.html';
+                    return null;
+                }
+                return dados;
+            } catch (e) {
+                window.location.href = 'login.html';
+                return null;
+            }
+        }
+
+        // Executa a verificação ao carregar a página
+        const usuarioLogado = verificarLogin();
+
+        // ==========================================================
+        // FUNÇÃO PARA OBTER O CONFERENTE LOGADO
+        // ==========================================================
+
+        function obterConferente() {
+            try {
+                const dados = localStorage.getItem('usuario_logado');
+                if (dados) {
+                    const parsed = JSON.parse(dados);
+                    return { nome: parsed.nome, usuario: parsed.usuario };
+                }
+            } catch (e) {}
+            return { nome: 'Desconhecido', usuario: 'unknown' };
+        }
+
+        // ==========================================================
+        // FUNÇÃO PARA SAIR (LOGOUT)
+        // ==========================================================
+
+        function logout() {
+            localStorage.removeItem('usuario_logado');
+            localStorage.removeItem('conferente');
+            window.location.href = 'login.html';
+        }
+
+        // ==========================================================
+        // MOSTRA O USUÁRIO LOGADO NO RODAPÉ
+        // ==========================================================
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const conferente = obterConferente();
+            const usuarioElement = document.getElementById('usuario-logado');
+            if (usuarioElement) {
+                usuarioElement.textContent = `👤 ${conferente.nome}`;
+            }
+
+            // Botão de sair
+            const btnSair = document.getElementById('btn-sair');
+            if (btnSair) {
+                btnSair.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (confirm('Deseja realmente encerrar a sessão?')) {
+                        logout();
+                    }
+                });
+            }
+
+            // Foca no input de leitura
+            document.getElementById('barcode-input').focus();
+        });
+
 
         /* ==========================================================
            CONFIGURAÇÃO SUPABASE
