@@ -111,8 +111,8 @@
             }
         }
 
-        // Executa a verificação ao carregar a página
         const usuarioLogado = verificarLogin();
+
 
         // ==========================================================
         // FUNÇÃO PARA OBTER O CONFERENTE LOGADO
@@ -129,6 +129,7 @@
             return { nome: 'Desconhecido', usuario: 'unknown' };
         }
 
+
         // ==========================================================
         // FUNÇÃO PARA SAIR (LOGOUT)
         // ==========================================================
@@ -139,36 +140,36 @@
             window.location.href = 'index.html';
         }
 
+
         // ==========================================================
-        // MOSTRA O USUÁRIO LOGADO NO RODAPÉ
+        // FUNÇÃO PARA SALVAR LOG DA CONFERÊNCIA
         // ==========================================================
 
-        document.addEventListener('DOMContentLoaded', function() {
-            const conferente = obterConferente();
-            const usuarioElement = document.getElementById('usuario-logado');
-            if (usuarioElement) {
-                usuarioElement.textContent = `👤 ${conferente.nome}`;
+        async function salvarLogConferencia(dados) {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('conferencia_log')
+                    .insert({
+                        nr: dados.nr,
+                        volume_clie: dados.volume_clie,
+                        conferente: dados.conferente,
+                        status: dados.status,
+                        mensagem: dados.mensagem || null,
+                        created_at: new Date().toISOString()
+                    });
+                
+                if (error) {
+                    console.error('❌ Erro ao salvar log:', error);
+                }
+            } catch (err) {
+                console.error('❌ Erro ao salvar log:', err);
             }
-
-            // Botão de sair
-            const btnSair = document.getElementById('btn-sair');
-            if (btnSair) {
-                btnSair.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (confirm('Deseja realmente encerrar a sessão?')) {
-                        logout();
-                    }
-                });
-            }
-
-            // Foca no input de leitura
-            document.getElementById('barcode-input').focus();
-        });
+        }
 
 
-        /* ==========================================================
-           CONFIGURAÇÃO SUPABASE
-           ========================================================== */
+        // ==========================================================
+        // CONFIGURAÇÃO SUPABASE
+        // ==========================================================
 
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
@@ -214,6 +215,24 @@
         window.addEventListener('load', () => {
             inputField.focus();
             if (window.createSupabaseClient && !supabaseClient) inicializarSupabase();
+            
+            // Mostra o usuário logado
+            const conferente = obterConferente();
+            const usuarioElement = document.getElementById('usuario-logado');
+            if (usuarioElement) {
+                usuarioElement.textContent = `👤 ${conferente.nome}`;
+            }
+
+            // Botão de sair
+            const btnSair = document.getElementById('btn-sair');
+            if (btnSair) {
+                btnSair.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (confirm('Deseja realmente encerrar a sessão?')) {
+                        logout();
+                    }
+                });
+            }
         });
 
         function inicializarSupabase() {
@@ -248,96 +267,78 @@
 
 
         /* ==========================================================
-           SONS - AJUSTADOS PARA FICAREM MAIS ALTOS E PERCEPTÍVEIS
+           SONS
            ========================================================== */
 
         function tocarSom(tipo) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 
-                // Cria um oscilador para o tom principal
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
-                
-                // Cria um segundo oscilador para dar mais corpo ao som (harmônico)
                 const osc2 = audioCtx.createOscillator();
                 const gain2 = audioCtx.createGain();
 
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-                
                 osc2.connect(gain2);
                 gain2.connect(audioCtx.destination);
 
-                // Define o tipo de onda (sawtooth é mais perceptível que sine)
                 osc.type = 'sawtooth';
                 osc2.type = 'square';
 
                 if (tipo === 'sucesso') {
-                    // Som de sucesso: dois tons ascendentes (bip-bip)
                     osc.frequency.setValueAtTime(880, audioCtx.currentTime);
                     osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.1);
-                    
                     osc2.frequency.setValueAtTime(1320, audioCtx.currentTime);
                     osc2.frequency.setValueAtTime(1540, audioCtx.currentTime + 0.1);
                     
                     gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
-                    
                     gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
                     gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
                     
                     osc.start(audioCtx.currentTime);
                     osc.stop(audioCtx.currentTime + 0.25);
-                    
                     osc2.start(audioCtx.currentTime);
                     osc2.stop(audioCtx.currentTime + 0.25);
                     
                 } else if (tipo === 'erro') {
-                    // Som de erro: tom grave e intermitente (bip-bip-bip)
                     osc.frequency.setValueAtTime(180, audioCtx.currentTime);
                     osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.15);
                     osc.frequency.setValueAtTime(180, audioCtx.currentTime + 0.3);
-                    
                     osc2.frequency.setValueAtTime(120, audioCtx.currentTime);
                     osc2.frequency.setValueAtTime(100, audioCtx.currentTime + 0.15);
                     osc2.frequency.setValueAtTime(120, audioCtx.currentTime + 0.3);
                     
                     gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
-                    
                     gain2.gain.setValueAtTime(0.2, audioCtx.currentTime);
                     gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
                     
                     osc.start(audioCtx.currentTime);
                     osc.stop(audioCtx.currentTime + 0.45);
-                    
                     osc2.start(audioCtx.currentTime);
                     osc2.stop(audioCtx.currentTime + 0.45);
                     
                 } else {
-                    // Som neutro: tom médio, curto e limpo
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(660, audioCtx.currentTime);
-                    
                     osc2.type = 'triangle';
                     osc2.frequency.setValueAtTime(880, audioCtx.currentTime);
                     
                     gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-                    
                     gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
                     gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
                     
                     osc.start(audioCtx.currentTime);
                     osc.stop(audioCtx.currentTime + 0.12);
-                    
                     osc2.start(audioCtx.currentTime);
                     osc2.stop(audioCtx.currentTime + 0.12);
                 }
 
             } catch (e) {
-                // Silencia erros de áudio para não quebrar a funcionalidade
                 console.log('Erro no áudio:', e);
             }
         }
@@ -363,7 +364,6 @@
                     if (!codigoLido) { processando = false; return; }
 
                     if (etapa === 1) {
-                        // ETAPA 1: LEITURA DA NR
                         nrAtual = codigoLido;
                         displayNr.textContent = nrAtual;
                         displayVolume.textContent = '-';
@@ -377,7 +377,6 @@
                         tocarSom('neutro');
                         
                     } else if (etapa === 2) {
-                        // ETAPA 2: LEITURA DO VOLUME
                         const volumeLido = codigoLido;
                         displayVolume.textContent = volumeLido;
                         await validarNoSupabase(nrAtual, volumeLido);
@@ -390,7 +389,7 @@
 
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE - SIMPLES E DIRETA
+           VALIDAÇÃO NO SUPABASE - COM SALVAMENTO DE LOG
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -404,9 +403,9 @@
 
             const nrLida = String(nr).trim();
             const volumeLido = String(volume).trim();
+            const conferente = obterConferente();
 
             try {
-                // 1. BUSCA O REGISTRO ESPECÍFICO: NR + volume_clie
                 const { data: registro, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
@@ -416,11 +415,16 @@
 
                 if (error) throw error;
 
-                // 2. VERIFICA SE ENCONTROU
                 if (registro) {
-                    // ✅ ENCONTROU! NR + volume_clie correspondem na mesma linha
-                    
-                    // Mostra o cliente se disponível
+                    // ✅ SUCESSO
+                    await salvarLogConferencia({
+                        nr: nrLida,
+                        volume_clie: volumeLido,
+                        conferente: conferente.nome || 'Desconhecido',
+                        status: 'sucesso',
+                        mensagem: null
+                    });
+
                     if (registro.cliente || registro.remetente) {
                         clienteInfo.classList.remove('hidden');
                         displayCliente.textContent = registro.cliente || registro.remetente || 'N/A';
@@ -428,26 +432,34 @@
                         clienteInfo.classList.add('hidden');
                     }
 
-                    // Mostra o volume_clie encontrado
                     matchInfo.classList.remove('hidden');
                     displayMatch.textContent = volumeLido + ' ✅';
 
                     setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
                 } else {
-                    // ❌ NÃO ENCONTROU! Verifica se a NR existe
+                    // ❌ ERRO
                     const { data: nrExiste } = await supabaseClient
                         .from('conferencia')
                         .select('nr')
                         .eq('nr', nrLida)
                         .maybeSingle();
 
+                    let mensagemErro = '';
                     if (!nrExiste) {
-                        setFeedbackVisual(false, "NR NÃO ENCONTRADA", 
-                            `A NR ${nrLida} não existe na base.`);
+                        mensagemErro = `A NR ${nrLida} não existe na base.`;
+                        setFeedbackVisual(false, "NR NÃO ENCONTRADA", mensagemErro);
                     } else {
-                        setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR",
-                            `O volume ${volumeLido} não está vinculado à NR ${nrLida}.`);
+                        mensagemErro = `O volume ${volumeLido} não está vinculado à NR ${nrLida}.`;
+                        setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR", mensagemErro);
                     }
+
+                    await salvarLogConferencia({
+                        nr: nrLida,
+                        volume_clie: volumeLido,
+                        conferente: conferente.nome || 'Desconhecido',
+                        status: 'erro',
+                        mensagem: mensagemErro
+                    });
                 }
 
             } catch (err) {
