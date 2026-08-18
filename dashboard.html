@@ -98,7 +98,7 @@
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Gráfico: Divergências por Cliente -->
             <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
-                <h3 class="text-sm font-semibold text-slate-300 mb-4">⚠️ Divergências por Cliente</h3>
+                <h3 class="text-sm font-semibold text-slate-300 mb-4">⚠️ Divergências por NR</h3>
                 <canvas id="chart-clientes" height="200"></canvas>
             </div>
 
@@ -120,18 +120,39 @@
 
     <script>
         // ==========================================================
+        // VERIFICA LOGIN
+        // ==========================================================
+
+        function verificarLogin() {
+            const usuarioSalvo = localStorage.getItem('usuario_logado');
+            if (!usuarioSalvo) {
+                window.location.href = 'index.html';
+                return null;
+            }
+            try {
+                const dados = JSON.parse(usuarioSalvo);
+                if (!dados.usuario) {
+                    window.location.href = 'index.html';
+                    return null;
+                }
+                return dados;
+            } catch (e) {
+                window.location.href = 'index.html';
+                return null;
+            }
+        }
+        verificarLogin();
+
+
+        // ==========================================================
         // VARIÁVEIS GLOBAIS
         // ==========================================================
 
         let supabaseClient = null;
         let charts = {};
         let dadosCache = {
-            conferencias: [],
-            totais: {
-                sucesso: 0,
-                erro: 0,
-                total: 0
-            }
+            logs: [],
+            totais: { sucesso: 0, erro: 0, total: 0 }
         };
 
 
@@ -146,7 +167,6 @@
             carregarDados();
         });
 
-        // Fallback se o evento não disparar
         setTimeout(() => {
             if (!supabaseClient && window.supabaseClient) {
                 supabaseClient = window.supabaseClient;
@@ -158,7 +178,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA CARREGAR DADOS
+        // FUNÇÃO PARA CARREGAR DADOS (USANDO conferencia_log)
         // ==========================================================
 
         async function carregarDados() {
@@ -168,25 +188,26 @@
             }
 
             try {
-                // Busca dados da tabela conferencia
-                const { data: conferencias, error } = await supabaseClient
-                    .from('conferencia')
+                // Busca dados da tabela conferencia_log (histórico)
+                const { data: logs, error } = await supabaseClient
+                    .from('conferencia_log')
                     .select('*')
                     .order('created_at', { ascending: false })
-                    .limit(200);
+                    .limit(500);
 
                 if (error) throw error;
 
-                if (!conferencias || conferencias.length === 0) {
-                    console.log('📭 Nenhum dado encontrado');
-                    document.getElementById('footer-info').textContent = '📭 Nenhum registro encontrado na tabela conferencia';
+                if (!logs || logs.length === 0) {
+                    console.log('📭 Nenhum dado encontrado na conferencia_log');
+                    document.getElementById('footer-info').textContent = '📭 Nenhum registro encontrado na tabela conferencia_log';
+                    limparDados();
                     return;
                 }
 
-                console.log(`📊 ${conferencias.length} registros carregados`);
-                dadosCache.conferencias = conferencias;
-                processarDados(conferencias);
-                atualizarGraficos(conferencias);
+                console.log(`📊 ${logs.length} registros carregados da conferencia_log`);
+                dadosCache.logs = logs;
+                processarDados(logs);
+                atualizarGraficos(logs);
 
             } catch (err) {
                 console.error('❌ Erro ao carregar dados:', err);
@@ -195,44 +216,84 @@
             }
         }
 
+        function limparDados() {
+            document.getElementById('total-conferido').textContent = '0';
+            document.getElementById('total-erros').textContent = '0';
+            document.getElementById('taxa-sucesso').textContent = '0%';
+            document.getElementById('barra-sucesso').style.width = '0%';
+            document.getElementById('conferente-atual').textContent = '-';
+            document.getElementById('volumes-conferente').textContent = '0';
+            document.getElementById('ultima-hora').textContent = '0';
+            document.getElementById('erros-ultima-hora').textContent = '0';
+            
+            const container = document.getElementById('ultimas-conferencias');
+            container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">Nenhuma conferência registrada</div>';
+            
+            // Reseta gráficos
+            if (charts.horas) {
+                charts.horas.data.labels = ['Sem dados'];
+                charts.horas.data.datasets[0].data = [0];
+                charts.horas.update();
+            }
+            if (charts.conferentes) {
+                charts.conferentes.data.labels = ['Sem dados'];
+                charts.conferentes.data.datasets[0].data = [1];
+                charts.conferentes.update();
+            }
+            if (charts.clientes) {
+                charts.clientes.data.labels = ['Sem dados'];
+                charts.clientes.data.datasets[0].data = [0];
+                charts.clientes.update();
+            }
+        }
+
 
         // ==========================================================
         // PROCESSAR DADOS
         // ==========================================================
 
-        function processarDados(conferencias) {
-            // Conta totais
+        function processarDados(logs) {
             let sucesso = 0;
             let erro = 0;
             let conferentes = {};
             let clientes = {};
             let horas = {};
-            let ultimas = conferencias.slice(0, 10);
+            let ultimas = logs.slice(0, 10);
+            let agora = new Date();
+            let ultimaHora = 0;
+            let errosUltimaHora = 0;
 
-            conferencias.forEach(c => {
-                // Status (simulação - você pode adaptar se tiver campo de status)
-                const status = c.status || (c.volume_clie ? 'sucesso' : 'erro');
-                if (status === 'sucesso' || status === 'conferido') {
+            logs.forEach(log => {
+                // Conta por status
+                if (log.status === 'sucesso') {
                     sucesso++;
-                } else {
+                } else if (log.status === 'erro') {
                     erro++;
                 }
 
-                // Conferentes
-                const conferente = c.conferente || c.usuario || 'Desconhecido';
-                conferentes[conferente] = (conferentes[conferente] || 0) + 1;
-
-                // Clientes
-                const cliente = c.cliente || c.remetente || 'Desconhecido';
-                if (status === 'erro' || status === 'divergencia') {
-                    clientes[cliente] = (clientes[cliente] || 0) + 1;
+                // Conta por conferente
+                if (log.conferente) {
+                    conferentes[log.conferente] = (conferentes[log.conferente] || 0) + 1;
                 }
 
-                // Horas
-                if (c.created_at) {
-                    const hora = new Date(c.created_at).getHours();
+                // Conta erros por NR (cliente)
+                if (log.status === 'erro' && log.nr) {
+                    clientes[log.nr] = (clientes[log.nr] || 0) + 1;
+                }
+
+                // Conta por hora
+                if (log.created_at) {
+                    const data = new Date(log.created_at);
+                    const hora = data.getHours();
                     const horaStr = String(hora).padStart(2, '0') + 'h';
                     horas[horaStr] = (horas[horaStr] || 0) + 1;
+
+                    // Última hora
+                    const diffHoras = (agora - data) / (1000 * 60 * 60);
+                    if (diffHoras <= 1) {
+                        ultimaHora++;
+                        if (log.status === 'erro') errosUltimaHora++;
+                    }
                 }
             });
 
@@ -241,6 +302,8 @@
             // Atualiza cards
             document.getElementById('total-conferido').textContent = dadosCache.totais.total;
             document.getElementById('total-erros').textContent = erro;
+            document.getElementById('ultima-hora').textContent = ultimaHora;
+            document.getElementById('erros-ultima-hora').textContent = errosUltimaHora;
 
             const taxa = dadosCache.totais.total > 0 ? Math.round((sucesso / dadosCache.totais.total) * 100) : 0;
             document.getElementById('taxa-sucesso').textContent = taxa + '%';
@@ -261,7 +324,6 @@
             document.getElementById('footer-info').textContent = 
                 `📊 ${dadosCache.totais.total} registros | ✅ ${sucesso} sucessos | ❌ ${erro} erros | Última atualização: ${dataAtual}`;
 
-            // Armazena para os gráficos
             dadosCache.conferentes = conferentes;
             dadosCache.clientes = clientes;
             dadosCache.horas = horas;
@@ -280,14 +342,16 @@
                 return;
             }
 
-            container.innerHTML = ultimas.map(c => {
-                const data = c.created_at ? new Date(c.created_at).toLocaleTimeString('pt-BR') : '-';
-                const status = c.status || (c.volume_clie ? '✅ Sucesso' : '❌ Erro');
-                const cor = status.includes('Sucesso') ? 'text-green-400' : 'text-red-400';
+            container.innerHTML = ultimas.map(log => {
+                const data = log.created_at ? new Date(log.created_at).toLocaleTimeString('pt-BR') : '-';
+                const status = log.status === 'sucesso' ? '✅ Sucesso' : '❌ Erro';
+                const cor = log.status === 'sucesso' ? 'text-green-400' : 'text-red-400';
+                const conferente = log.conferente || 'Desconhecido';
                 return `
                     <div class="flex justify-between items-center bg-slate-700/30 px-3 py-2 rounded-lg text-sm">
-                        <span class="font-mono text-slate-300">${c.nr || 'N/A'}</span>
+                        <span class="font-mono text-slate-300">${log.nr || 'N/A'}</span>
                         <span class="${cor} font-semibold">${status}</span>
+                        <span class="text-slate-400 text-xs">${conferente}</span>
                         <span class="text-slate-500 text-xs">${data}</span>
                     </div>
                 `;
@@ -299,31 +363,25 @@
         // ATUALIZAR GRÁFICOS
         // ==========================================================
 
-        function atualizarGraficos(conferencias) {
-            const cores = {
-                sucesso: 'rgba(52, 211, 153, 0.8)',
-                erro: 'rgba(248, 113, 113, 0.8)',
-                fundo: 'rgba(71, 85, 105, 0.3)'
-            };
-
+        function atualizarGraficos(logs) {
             // 1. Gráfico de Horas
             const horas = dadosCache.horas || {};
             const labelsHoras = Object.keys(horas).sort();
             const dadosHoras = labelsHoras.map(h => horas[h] || 0);
 
             if (charts.horas) {
-                charts.horas.data.labels = labelsHoras;
-                charts.horas.data.datasets[0].data = dadosHoras;
+                charts.horas.data.labels = labelsHoras.length > 0 ? labelsHoras : ['Sem dados'];
+                charts.horas.data.datasets[0].data = dadosHoras.length > 0 ? dadosHoras : [0];
                 charts.horas.update();
             } else {
                 const ctx = document.getElementById('chart-horas').getContext('2d');
                 charts.horas = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: labelsHoras,
+                        labels: labelsHoras.length > 0 ? labelsHoras : ['Sem dados'],
                         datasets: [{
                             label: 'Volumes',
-                            data: dadosHoras,
+                            data: dadosHoras.length > 0 ? dadosHoras : [0],
                             backgroundColor: 'rgba(52, 211, 153, 0.7)',
                             borderColor: 'rgba(52, 211, 153, 1)',
                             borderWidth: 1,
@@ -333,17 +391,10 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
+                        plugins: { legend: { display: false } },
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: { color: '#94a3b8', stepSize: 1 }
-                            },
-                            x: {
-                                ticks: { color: '#94a3b8' }
-                            }
+                            y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 } },
+                            x: { ticks: { color: '#94a3b8' } }
                         }
                     }
                 });
@@ -358,17 +409,17 @@
             const dadosConf = topConferentes.map(c => c[1]);
 
             if (charts.conferentes) {
-                charts.conferentes.data.labels = labelsConf;
-                charts.conferentes.data.datasets[0].data = dadosConf;
+                charts.conferentes.data.labels = labelsConf.length > 0 ? labelsConf : ['Sem dados'];
+                charts.conferentes.data.datasets[0].data = dadosConf.length > 0 ? dadosConf : [1];
                 charts.conferentes.update();
             } else {
                 const ctx = document.getElementById('chart-conferentes').getContext('2d');
                 charts.conferentes = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
-                        labels: labelsConf,
+                        labels: labelsConf.length > 0 ? labelsConf : ['Sem dados'],
                         datasets: [{
-                            data: dadosConf,
+                            data: dadosConf.length > 0 ? dadosConf : [1],
                             backgroundColor: [
                                 'rgba(251, 191, 36, 0.8)',
                                 'rgba(52, 211, 153, 0.8)',
@@ -405,18 +456,18 @@
             const dadosCli = topClientes.map(c => c[1]);
 
             if (charts.clientes) {
-                charts.clientes.data.labels = labelsCli;
-                charts.clientes.data.datasets[0].data = dadosCli;
+                charts.clientes.data.labels = labelsCli.length > 0 ? labelsCli : ['Sem dados'];
+                charts.clientes.data.datasets[0].data = dadosCli.length > 0 ? dadosCli : [0];
                 charts.clientes.update();
             } else {
                 const ctx = document.getElementById('chart-clientes').getContext('2d');
                 charts.clientes = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: labelsCli,
+                        labels: labelsCli.length > 0 ? labelsCli : ['Sem dados'],
                         datasets: [{
                             label: 'Divergências',
-                            data: dadosCli,
+                            data: dadosCli.length > 0 ? dadosCli : [0],
                             backgroundColor: 'rgba(248, 113, 113, 0.7)',
                             borderColor: 'rgba(248, 113, 113, 1)',
                             borderWidth: 1,
@@ -426,17 +477,10 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
+                        plugins: { legend: { display: false } },
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: { color: '#94a3b8', stepSize: 1 }
-                            },
-                            x: {
-                                ticks: { color: '#94a3b8', font: { size: 9 } }
-                            }
+                            y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 } },
+                            x: { ticks: { color: '#94a3b8', font: { size: 9 } } }
                         }
                     }
                 });
@@ -449,11 +493,8 @@
         // ==========================================================
 
         document.getElementById('btn-atualizar').addEventListener('click', carregarDados);
-
-        // Atualização automática a cada 30 segundos
         setInterval(carregarDados, 30000);
 
-        // Carregar dados iniciais
         console.log('📊 Dashboard iniciado');
     </script>
 
