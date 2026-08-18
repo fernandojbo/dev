@@ -17,7 +17,7 @@
 </head>
 
 <body id="app-bg"
-      class="bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300">
+      class="bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-150">
 
     <!-- Cabeçalho -->
     <header class="p-4 bg-slate-800 shadow-md text-center">
@@ -30,7 +30,7 @@
 
         <!-- STATUS BOX -->
         <div id="status-box"
-             class="w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all">
+             class="w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-150">
 
             <h2 id="instruction-title" class="text-lg font-semibold text-slate-300 mb-2">
                 Aguardando Leitura...
@@ -90,7 +90,6 @@
 
         // ==========================================================
         // PROTEÇÃO DE ACESSO - VERIFICA SE O USUÁRIO ESTÁ LOGADO
-        // E REDIRECIONA ADMIN PARA O PAINEL ADMIN
         // ==========================================================
 
         function verificarLogin() {
@@ -105,8 +104,6 @@
                     window.location.href = 'index.html';
                     return null;
                 }
-                
-                // SE FOR ADMIN, REDIRECIONA PARA O PAINEL ADMIN
                 if (dados.role === 'admin') {
                     const isInAdmin = window.location.pathname.includes('admin-layout.html') || 
                                       (window.parent && window.parent.location.pathname.includes('admin-layout.html'));
@@ -158,7 +155,7 @@
 
         async function salvarLogConferencia(dados) {
             try {
-                const { data, error } = await supabaseClient
+                await supabaseClient
                     .from('conferencia_log')
                     .insert({
                         nr: dados.nr,
@@ -168,10 +165,6 @@
                         mensagem: dados.mensagem || null,
                         created_at: new Date().toISOString()
                     });
-                
-                if (error) {
-                    console.error('❌ Erro ao salvar log:', error);
-                }
             } catch (err) {
                 console.error('❌ Erro ao salvar log:', err);
             }
@@ -276,75 +269,53 @@
 
 
         /* ==========================================================
-           SONS
+           SONS - MAIS CURTOS
            ========================================================== */
 
         function tocarSom(tipo) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
-                const osc2 = audioCtx.createOscillator();
-                const gain2 = audioCtx.createGain();
-
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-                osc2.connect(gain2);
-                gain2.connect(audioCtx.destination);
 
                 osc.type = 'sawtooth';
-                osc2.type = 'square';
 
                 if (tipo === 'sucesso') {
                     osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                    osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.08);
-                    osc2.frequency.setValueAtTime(1320, audioCtx.currentTime);
-                    osc2.frequency.setValueAtTime(1540, audioCtx.currentTime + 0.08);
-                    
-                    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-                    gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-                    
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + 0.2);
-                    osc2.start(audioCtx.currentTime);
-                    osc2.stop(audioCtx.currentTime + 0.2);
+                    osc.stop(audioCtx.currentTime + 0.1);
+                    
+                    // Segundo bip mais curto
+                    setTimeout(() => {
+                        const osc2 = audioCtx.createOscillator();
+                        const gain2 = audioCtx.createGain();
+                        osc2.connect(gain2);
+                        gain2.connect(audioCtx.destination);
+                        osc2.frequency.setValueAtTime(1100, audioCtx.currentTime);
+                        gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                        gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                        osc2.start(audioCtx.currentTime);
+                        osc2.stop(audioCtx.currentTime + 0.08);
+                    }, 80);
                     
                 } else if (tipo === 'erro') {
-                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
-                    osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.1);
-                    osc.frequency.setValueAtTime(180, audioCtx.currentTime + 0.2);
-                    osc2.frequency.setValueAtTime(120, audioCtx.currentTime);
-                    osc2.frequency.setValueAtTime(100, audioCtx.currentTime + 0.1);
-                    osc2.frequency.setValueAtTime(120, audioCtx.currentTime + 0.2);
-                    
-                    gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
-                    gain2.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
-                    
+                    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + 0.35);
-                    osc2.start(audioCtx.currentTime);
-                    osc2.stop(audioCtx.currentTime + 0.35);
+                    osc.stop(audioCtx.currentTime + 0.15);
                     
                 } else {
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(660, audioCtx.currentTime);
-                    osc2.type = 'triangle';
-                    osc2.frequency.setValueAtTime(880, audioCtx.currentTime);
-                    
-                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                    gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                    
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.06);
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + 0.1);
-                    osc2.start(audioCtx.currentTime);
-                    osc2.stop(audioCtx.currentTime + 0.1);
+                    osc.stop(audioCtx.currentTime + 0.06);
                 }
 
             } catch (e) {}
@@ -396,7 +367,7 @@
 
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE - COM SALVAMENTO DE LOG
+           VALIDAÇÃO NO SUPABASE
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -442,7 +413,7 @@
                     matchInfo.classList.remove('hidden');
                     displayMatch.textContent = volumeLido + ' ✅';
 
-                    setFeedbackVisual(true, "CONFERIDO", null);
+                    setFeedbackVisual(true, "✅ CONFERIDO", null);
                 } else {
                     // ❌ ERRO
                     const { data: nrExiste } = await supabaseClient
@@ -454,10 +425,10 @@
                     let mensagemErro = '';
                     if (!nrExiste) {
                         mensagemErro = `NR ${nrLida} não existe`;
-                        setFeedbackVisual(false, "NR INVÁLIDA", mensagemErro);
+                        setFeedbackVisual(false, "❌ NR INVÁLIDA", mensagemErro);
                     } else {
                         mensagemErro = `Volume ${volumeLido} não pertence à NR ${nrLida}`;
-                        setFeedbackVisual(false, "VOLUME INVÁLIDO", mensagemErro);
+                        setFeedbackVisual(false, "❌ VOLUME INVÁLIDO", mensagemErro);
                     }
 
                     await salvarLogConferencia({
@@ -471,13 +442,13 @@
 
             } catch (err) {
                 console.error("Erro detalhado no Supabase:", err);
-                setFeedbackVisual(false, "ERRO", err.message || "Falha ao buscar dados.");
+                setFeedbackVisual(false, "❌ ERRO", err.message || "Falha ao buscar dados.");
             }
         }
 
 
         /* ==========================================================
-           FEEDBACK VISUAL - OTIMIZADO PARA LEITURA RÁPIDA
+           FEEDBACK VISUAL - MODO TURBO ⚡
            ========================================================== */
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
@@ -490,13 +461,13 @@
             instructionTitle.textContent = mensagem;
 
             if (sucesso) {
-                appBg.className = "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-200";
-                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all duration-200";
+                appBg.className = "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-100";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all duration-100";
                 errorDetails.classList.add('hidden');
                 tocarSom('sucesso');
             } else {
-                appBg.className = "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-200";
-                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all duration-200";
+                appBg.className = "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-100";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all duration-100";
                 if (detalheExtra) {
                     displayInfoExtra.textContent = detalheExtra;
                     errorDetails.classList.remove('hidden');
@@ -506,12 +477,12 @@
                 tocarSom('erro');
             }
 
-            // TEMPOS REDUZIDOS: 800ms para sucesso, 1200ms para erro
-            const tempoEspera = sucesso ? 800 : 1200;
+            // ⚡ TEMPOS MÍNIMOS: 400ms para sucesso, 600ms para erro
+            const tempoEspera = sucesso ? 400 : 600;
 
             timeoutFeedback = setTimeout(() => {
-                appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-200";
-                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-200";
+                appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-100";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-100";
                 instructionTitle.textContent = "Aguardando Leitura...";
                 instructionSub.innerHTML = "Bipe a etiqueta <strong>NR</strong>";
                 displayNr.textContent = "-";
@@ -523,7 +494,7 @@
                 nrAtual = '';
                 timeoutFeedback = null;
                 
-                // Foca no input após reset
+                // Foca no input imediatamente
                 inputField.focus();
             }, tempoEspera);
         }
