@@ -300,7 +300,7 @@
 
 
         // ==========================================================
-        // ATUALIZAR ÚLTIMAS CONFERÊNCIAS
+        // ATUALIZAR ÚLTIMAS CONFERÊNCIAS (NR COMPLETO)
         // ==========================================================
 
         function atualizarUltimasConferencias(ultimas) {
@@ -316,12 +316,13 @@
                 const status = log.status === 'sucesso' ? '✅ Sucesso' : '❌ Erro';
                 const cor = log.status === 'sucesso' ? 'text-green-400' : 'text-red-400';
                 const conferente = log.conferente || 'Desconhecido';
+                const nr = log.nr || 'N/A';
                 return `
-                    <div class="flex justify-between items-center bg-slate-700/30 px-2.5 py-1.5 rounded-lg text-xs">
-                        <span class="font-mono text-slate-300 truncate max-w-[80px]">${log.nr || 'N/A'}</span>
-                        <span class="${cor} font-semibold">${status}</span>
-                        <span class="text-slate-400">${conferente}</span>
-                        <span class="text-slate-500">${data}</span>
+                    <div class="flex justify-between items-center bg-slate-700/30 px-2.5 py-1.5 rounded-lg text-xs gap-2">
+                        <span class="font-mono text-slate-300 text-xs" style="min-width: 120px;">${nr}</span>
+                        <span class="${cor} font-semibold text-xs">${status}</span>
+                        <span class="text-slate-400 text-xs">${conferente}</span>
+                        <span class="text-slate-500 text-xs">${data}</span>
                     </div>
                 `;
             }).join('');
