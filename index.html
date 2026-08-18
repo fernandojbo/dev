@@ -94,8 +94,8 @@
             try {
                 const dados = JSON.parse(usuarioSalvo);
                 if (dados.usuario) {
-                    // Já está logado, redireciona
-                    window.location.href = 'index.html';
+                    // Já está logado, redireciona para conferencia.html
+                    window.location.href = 'conferencia.html';
                 }
             } catch (e) {}
         }
@@ -163,9 +163,9 @@
 
                     mostrarStatus('✅ Login realizado! Redirecionando...', 'text-green-400');
 
-                    // Redireciona para o sistema
+                    // Redireciona para conferencia.html (NOVO DESTINO!)
                     setTimeout(() => {
-                        window.location.href = 'index.html';
+                        window.location.href = 'conferencia.html';
                     }, 800);
 
                 } else {
@@ -205,14 +205,18 @@
         // ENTER PARA ENVIAR O FORMULÁRIO
         // ==========================================================
 
+        // Pressionar Enter no campo SENHA = submeter o formulário
         senhaInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
                 form.dispatchEvent(new Event('submit'));
             }
         });
 
+        // Pressionar Enter no campo USUÁRIO = ir para o campo SENHA
         usuarioInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
                 senhaInput.focus();
             }
         });
