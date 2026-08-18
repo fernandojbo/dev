@@ -90,6 +90,7 @@
 
         // ==========================================================
         // PROTEÇÃO DE ACESSO - VERIFICA SE O USUÁRIO ESTÁ LOGADO
+        // E REDIRECIONA ADMIN PARA O PAINEL ADMIN
         // ==========================================================
 
         function verificarLogin() {
@@ -103,6 +104,17 @@
                 if (!dados.usuario) {
                     window.location.href = 'index.html';
                     return null;
+                }
+                
+                // SE FOR ADMIN, REDIRECIONA PARA O PAINEL ADMIN
+                if (dados.role === 'admin') {
+                    // Verifica se já está no admin-layout (para evitar loop)
+                    const isInAdmin = window.location.pathname.includes('admin-layout.html') || 
+                                      (window.parent && window.parent.location.pathname.includes('admin-layout.html'));
+                    if (!isInAdmin) {
+                        window.location.href = 'admin-layout.html';
+                        return null;
+                    }
                 }
                 return dados;
             } catch (e) {
@@ -123,10 +135,10 @@
                 const dados = localStorage.getItem('usuario_logado');
                 if (dados) {
                     const parsed = JSON.parse(dados);
-                    return { nome: parsed.nome, usuario: parsed.usuario };
+                    return { nome: parsed.nome, usuario: parsed.usuario, role: parsed.role || 'conferente' };
                 }
             } catch (e) {}
-            return { nome: 'Desconhecido', usuario: 'unknown' };
+            return { nome: 'Desconhecido', usuario: 'unknown', role: 'conferente' };
         }
 
 
@@ -147,6 +159,8 @@
 
         async function salvarLogConferencia(dados) {
             try {
+                console.log('📝 Salvando log:', dados);
+                
                 const { data, error } = await supabaseClient
                     .from('conferencia_log')
                     .insert({
@@ -160,6 +174,8 @@
                 
                 if (error) {
                     console.error('❌ Erro ao salvar log:', error);
+                } else {
+                    console.log('✅ Log salvo com sucesso:', data);
                 }
             } catch (err) {
                 console.error('❌ Erro ao salvar log:', err);
