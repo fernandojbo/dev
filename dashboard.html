@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Métricas de Conferência</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+        window.supabaseClient = createClient(
+            'https://fqrfknyludtvqaaajjoc.supabase.co',
+            'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx'
+        );
+        window.dispatchEvent(new Event('supabase-ready'));
+    </script>
+</head>
+
+<body class="bg-slate-900 text-white min-h-screen p-6">
+
+    <div class="max-w-7xl mx-auto">
+
+        <!-- Cabeçalho -->
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">📊 Dashboard de Conferência</h1>
+                <p class="text-slate-400 text-sm">Métricas em tempo real do sistema de duplo bip</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="connection-status" class="text-sm text-yellow-400">⏳ Conectando...</span>
+                <button id="btn-atualizar" class="bg-amber-600 hover:bg-amber-700 px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                    🔄 Atualizar
+                </button>
+            </div>
+        </header>
+
+        <!-- Cards de Resumo -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">📦 Total Conferido</span>
+                    <span class="text-2xl font-bold text-emerald-400" id="total-conferido">0</span>
+                </div>
+                <div class="mt-2">
+                    <span class="text-xs text-slate-500">Última hora: <span id="ultima-hora" class="text-slate-300">0</span></span>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">✅ Taxa de Sucesso</span>
+                    <span class="text-2xl font-bold text-green-400" id="taxa-sucesso">0%</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-2 mt-2">
+                    <div id="barra-sucesso" class="bg-green-400 h-2 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">❌ Divergências</span>
+                    <span class="text-2xl font-bold text-red-400" id="total-erros">0</span>
+                </div>
+                <div class="mt-2">
+                    <span class="text-xs text-slate-500">Última hora: <span id="erros-ultima-hora" class="text-slate-300">0</span></span>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-slate-400">👤 Conferente Atual</span>
+                    <span class="text-2xl font-bold text-amber-400" id="conferente-atual">-</span>
+                </div>
+                <div class="mt-2">
+                    <span class="text-xs text-slate-500">Volumes: <span id="volumes-conferente" class="text-slate-300">0</span></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Gráficos Principais -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Gráfico: Volumes por Hora -->
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 class="text-sm font-semibold text-slate-300 mb-4">📈 Volumes Conferidos por Hora</h3>
+                <canvas id="chart-horas" height="200"></canvas>
+            </div>
+
+            <!-- Gráfico: Top Conferentes -->
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 class="text-sm font-semibold text-slate-300 mb-4">🏆 Top Conferentes</h3>
+                <canvas id="chart-conferentes" height="200"></canvas>
+            </div>
+        </section>
+
+        <!-- Segunda Linha de Gráficos -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Gráfico: Divergências por Cliente -->
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 class="text-sm font-semibold text-slate-300 mb-4">⚠️ Divergências por Cliente</h3>
+                <canvas id="chart-clientes" height="200"></canvas>
+            </div>
+
+            <!-- Status das Últimas Conferências -->
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h3 class="text-sm font-semibold text-slate-300 mb-4">🕒 Últimas Conferências</h3>
+                <div id="ultimas-conferencias" class="space-y-2 max-h-[200px] overflow-y-auto">
+                    <div class="text-center text-slate-500 text-sm py-4">Nenhuma conferência registrada</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Rodapé com estatísticas adicionais -->
+        <footer class="mt-8 p-4 bg-slate-800/50 rounded-xl border border-slate-700 text-center text-xs text-slate-500">
+            <span id="footer-info">⏳ Aguardando dados...</span>
+        </footer>
+
+    </div>
+
+    <script>
+        // ==========================================================
+        // VARIÁVEIS GLOBAIS
+        // ==========================================================
+
+        let supabaseClient = null;
+        let charts = {};
+        let dadosCache = {
+            conferencias: [],
+            totais: {
+                sucesso: 0,
+                erro: 0,
+                total: 0
+            }
+        };
+
+
+        // ==========================================================
+        // INICIALIZAÇÃO
+        // ==========================================================
+
+        window.addEventListener('supabase-ready', () => {
+            supabaseClient = window.supabaseClient;
+            document.getElementById('connection-status').textContent = '✅ Conectado';
+            document.getElementById('connection-status').className = 'text-sm text-green-400';
+            carregarDados();
+        });
+
+        // Fallback se o evento não disparar
+        setTimeout(() => {
+            if (!supabaseClient && window.supabaseClient) {
+                supabaseClient = window.supabaseClient;
+                document.getElementById('connection-status').textContent = '✅ Conectado';
+                document.getElementById('connection-status').className = 'text-sm text-green-400';
+                carregarDados();
+            }
+        }, 2000);
+
+
+        // ==========================================================
+        // FUNÇÃO PARA CARREGAR DADOS
+        // ==========================================================
+
+        async function carregarDados() {
+            if (!supabaseClient) {
+                console.warn('⚠️ Supabase não inicializado');
+                return;
+            }
+
+            try {
+                // Busca dados da tabela conferencia
+                const { data: conferencias, error } = await supabaseClient
+                    .from('conferencia')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(200);
+
+                if (error) throw error;
+
+                if (!conferencias || conferencias.length === 0) {
+                    console.log('📭 Nenhum dado encontrado');
+                    document.getElementById('footer-info').textContent = '📭 Nenhum registro encontrado na tabela conferencia';
+                    return;
+                }
+
+                console.log(`📊 ${conferencias.length} registros carregados`);
+                dadosCache.conferencias = conferencias;
+                processarDados(conferencias);
+                atualizarGraficos(conferencias);
+
+            } catch (err) {
+                console.error('❌ Erro ao carregar dados:', err);
+                document.getElementById('connection-status').textContent = '❌ Erro ao carregar';
+                document.getElementById('connection-status').className = 'text-sm text-red-400';
+            }
+        }
+
+
+        // ==========================================================
+        // PROCESSAR DADOS
+        // ==========================================================
+
+        function processarDados(conferencias) {
+            // Conta totais
+            let sucesso = 0;
+            let erro = 0;
+            let conferentes = {};
+            let clientes = {};
+            let horas = {};
+            let ultimas = conferencias.slice(0, 10);
+
+            conferencias.forEach(c => {
+                // Status (simulação - você pode adaptar se tiver campo de status)
+                const status = c.status || (c.volume_clie ? 'sucesso' : 'erro');
+                if (status === 'sucesso' || status === 'conferido') {
+                    sucesso++;
+                } else {
+                    erro++;
+                }
+
+                // Conferentes
+                const conferente = c.conferente || c.usuario || 'Desconhecido';
+                conferentes[conferente] = (conferentes[conferente] || 0) + 1;
+
+                // Clientes
+                const cliente = c.cliente || c.remetente || 'Desconhecido';
+                if (status === 'erro' || status === 'divergencia') {
+                    clientes[cliente] = (clientes[cliente] || 0) + 1;
+                }
+
+                // Horas
+                if (c.created_at) {
+                    const hora = new Date(c.created_at).getHours();
+                    const horaStr = String(hora).padStart(2, '0') + 'h';
+                    horas[horaStr] = (horas[horaStr] || 0) + 1;
+                }
+            });
+
+            dadosCache.totais = { sucesso, erro, total: sucesso + erro };
+
+            // Atualiza cards
+            document.getElementById('total-conferido').textContent = dadosCache.totais.total;
+            document.getElementById('total-erros').textContent = erro;
+
+            const taxa = dadosCache.totais.total > 0 ? Math.round((sucesso / dadosCache.totais.total) * 100) : 0;
+            document.getElementById('taxa-sucesso').textContent = taxa + '%';
+            document.getElementById('barra-sucesso').style.width = taxa + '%';
+
+            // Top conferente
+            const topConferente = Object.entries(conferentes).sort((a, b) => b[1] - a[1])[0];
+            if (topConferente) {
+                document.getElementById('conferente-atual').textContent = topConferente[0];
+                document.getElementById('volumes-conferente').textContent = topConferente[1];
+            }
+
+            // Últimas conferências
+            atualizarUltimasConferencias(ultimas);
+
+            // Footer
+            const dataAtual = new Date().toLocaleString('pt-BR');
+            document.getElementById('footer-info').textContent = 
+                `📊 ${dadosCache.totais.total} registros | ✅ ${sucesso} sucessos | ❌ ${erro} erros | Última atualização: ${dataAtual}`;
+
+            // Armazena para os gráficos
+            dadosCache.conferentes = conferentes;
+            dadosCache.clientes = clientes;
+            dadosCache.horas = horas;
+        }
+
+
+        // ==========================================================
+        // ATUALIZAR ÚLTIMAS CONFERÊNCIAS
+        // ==========================================================
+
+        function atualizarUltimasConferencias(ultimas) {
+            const container = document.getElementById('ultimas-conferencias');
+            
+            if (!ultimas || ultimas.length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">Nenhuma conferência registrada</div>';
+                return;
+            }
+
+            container.innerHTML = ultimas.map(c => {
+                const data = c.created_at ? new Date(c.created_at).toLocaleTimeString('pt-BR') : '-';
+                const status = c.status || (c.volume_clie ? '✅ Sucesso' : '❌ Erro');
+                const cor = status.includes('Sucesso') ? 'text-green-400' : 'text-red-400';
+                return `
+                    <div class="flex justify-between items-center bg-slate-700/30 px-3 py-2 rounded-lg text-sm">
+                        <span class="font-mono text-slate-300">${c.nr || 'N/A'}</span>
+                        <span class="${cor} font-semibold">${status}</span>
+                        <span class="text-slate-500 text-xs">${data}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+
+        // ==========================================================
+        // ATUALIZAR GRÁFICOS
+        // ==========================================================
+
+        function atualizarGraficos(conferencias) {
+            const cores = {
+                sucesso: 'rgba(52, 211, 153, 0.8)',
+                erro: 'rgba(248, 113, 113, 0.8)',
+                fundo: 'rgba(71, 85, 105, 0.3)'
+            };
+
+            // 1. Gráfico de Horas
+            const horas = dadosCache.horas || {};
+            const labelsHoras = Object.keys(horas).sort();
+            const dadosHoras = labelsHoras.map(h => horas[h] || 0);
+
+            if (charts.horas) {
+                charts.horas.data.labels = labelsHoras;
+                charts.horas.data.datasets[0].data = dadosHoras;
+                charts.horas.update();
+            } else {
+                const ctx = document.getElementById('chart-horas').getContext('2d');
+                charts.horas = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labelsHoras,
+                        datasets: [{
+                            label: 'Volumes',
+                            data: dadosHoras,
+                            backgroundColor: 'rgba(52, 211, 153, 0.7)',
+                            borderColor: 'rgba(52, 211, 153, 1)',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#94a3b8', stepSize: 1 }
+                            },
+                            x: {
+                                ticks: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 2. Gráfico de Conferentes
+            const conferentes = dadosCache.conferentes || {};
+            const topConferentes = Object.entries(conferentes)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8);
+            const labelsConf = topConferentes.map(c => c[0]);
+            const dadosConf = topConferentes.map(c => c[1]);
+
+            if (charts.conferentes) {
+                charts.conferentes.data.labels = labelsConf;
+                charts.conferentes.data.datasets[0].data = dadosConf;
+                charts.conferentes.update();
+            } else {
+                const ctx = document.getElementById('chart-conferentes').getContext('2d');
+                charts.conferentes = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labelsConf,
+                        datasets: [{
+                            data: dadosConf,
+                            backgroundColor: [
+                                'rgba(251, 191, 36, 0.8)',
+                                'rgba(52, 211, 153, 0.8)',
+                                'rgba(96, 165, 250, 0.8)',
+                                'rgba(248, 113, 113, 0.8)',
+                                'rgba(167, 139, 250, 0.8)',
+                                'rgba(251, 146, 60, 0.8)',
+                                'rgba(45, 212, 191, 0.8)',
+                                'rgba(244, 63, 94, 0.8)'
+                            ],
+                            borderWidth: 2,
+                            borderColor: '#1e293b'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#cbd5e1', font: { size: 10 } }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 3. Gráfico de Divergências por Cliente
+            const clientes = dadosCache.clientes || {};
+            const topClientes = Object.entries(clientes)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8);
+            const labelsCli = topClientes.map(c => c[0]);
+            const dadosCli = topClientes.map(c => c[1]);
+
+            if (charts.clientes) {
+                charts.clientes.data.labels = labelsCli;
+                charts.clientes.data.datasets[0].data = dadosCli;
+                charts.clientes.update();
+            } else {
+                const ctx = document.getElementById('chart-clientes').getContext('2d');
+                charts.clientes = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labelsCli,
+                        datasets: [{
+                            label: 'Divergências',
+                            data: dadosCli,
+                            backgroundColor: 'rgba(248, 113, 113, 0.7)',
+                            borderColor: 'rgba(248, 113, 113, 1)',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { color: '#94a3b8', stepSize: 1 }
+                            },
+                            x: {
+                                ticks: { color: '#94a3b8', font: { size: 9 } }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+
+        // ==========================================================
+        // ATUALIZAR AUTOMATICAMENTE A CADA 30 SEGUNDOS
+        // ==========================================================
+
+        document.getElementById('btn-atualizar').addEventListener('click', carregarDados);
+
+        // Atualização automática a cada 30 segundos
+        setInterval(carregarDados, 30000);
+
+        // Carregar dados iniciais
+        console.log('📊 Dashboard iniciado');
+    </script>
+
+</body>
+</html>
