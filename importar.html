@@ -11,19 +11,10 @@
         window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
     </script>
     <style>
-        .campo-obrigatorio::after {
-            content: " *";
-            color: #ef4444;
-            font-weight: bold;
-        }
-        .detectado {
-            background-color: rgba(52, 211, 153, 0.15);
-            border-color: rgba(52, 211, 153, 0.3);
-        }
-        .nao-detectado {
-            background-color: rgba(251, 191, 36, 0.08);
-            border-color: rgba(251, 191, 36, 0.2);
-        }
+        .campo-obrigatorio::after { content: " *"; color: #ef4444; font-weight: bold; }
+        .detectado { background-color: rgba(52, 211, 153, 0.15); border-color: rgba(52, 211, 153, 0.3); }
+        .nao-detectado { background-color: rgba(251, 191, 36, 0.08); border-color: rgba(251, 191, 36, 0.2); }
+        .regra-aplicada { background-color: rgba(96, 165, 250, 0.1); border-color: rgba(96, 165, 250, 0.3); }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
@@ -34,17 +25,27 @@
             Selecione o arquivo e indique quais colunas correspondem aos dados do sistema.
         </p>
 
-        <!-- Upload do arquivo -->
+        <!-- Upload -->
         <div class="border-2 border-dashed border-slate-600 rounded-xl p-6 text-center hover:border-amber-500 transition-colors">
-            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" class="hidden">
+            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx,.sswweb" class="hidden">
             <label for="fileInput" class="cursor-pointer block">
                 <span class="text-4xl block mb-2">📂</span>
-                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV ou XLSX</span>
+                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV, XLSX ou SSWWeb</span>
                 <span id="fileName" class="text-xs text-slate-500">Nenhum arquivo escolhido</span>
             </label>
         </div>
 
-        <!-- Área de Mapeamento -->
+        <!-- Regras aplicadas -->
+        <div id="regras-area" class="hidden mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+            <h4 class="text-xs font-semibold text-blue-300 mb-2">⚙️ Regras aplicadas automaticamente (como no VBA):</h4>
+            <ul class="text-xs text-slate-300 space-y-1">
+                <li id="regra-linhas" class="flex items-center gap-2">🔹 <span>Todas as colunas importadas como TEXTO</span></li>
+                <li id="regra-remover" class="flex items-center gap-2">🔹 <span>Removidas linhas 0 e 1 (cabeçalho duplo)</span></li>
+                <li id="regra-filtro" class="flex items-center gap-2">🔹 <span>Filtro aplicado: removidas linhas com "C" na coluna B</span></li>
+            </ul>
+        </div>
+
+        <!-- Mapeamento -->
         <div id="mapeamento-area" class="hidden mt-6">
             <div class="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3 mb-4">
                 <p class="text-xs text-amber-300">
@@ -55,33 +56,33 @@
             </div>
 
             <h3 class="text-md font-semibold text-white mb-3">🔀 Mapeamento de Colunas</h3>
-            <p class="text-xs text-slate-400 mb-3">Colunas em <span class="text-emerald-400">verde</span> foram detectadas automaticamente. Confirme se está correto.</p>
+            <p class="text-xs text-slate-400 mb-3">Colunas em <span class="text-emerald-400">verde</span> foram detectadas automaticamente.</p>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                     <label class="block text-xs text-slate-400 mb-1 campo-obrigatorio">📋 NR (Etiqueta)</label>
                     <select id="map-nr" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                        <option value="">🔽 Selecione a coluna...</option>
+                        <option value="">🔽 Selecione...</option>
                     </select>
                     <p class="text-[10px] text-slate-500 mt-1">Código da etiqueta da transportadora</p>
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">📄 NF (Nota Fiscal)</label>
                     <select id="map-nf" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                        <option value="">🔽 Selecione a coluna...</option>
+                        <option value="">🔽 Selecione...</option>
                     </select>
                     <p class="text-[10px] text-slate-500 mt-1">Número da nota fiscal (opcional)</p>
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1 campo-obrigatorio">📦 VOLUME_CLIE</label>
                     <select id="map-volume" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                        <option value="">🔽 Selecione a coluna...</option>
+                        <option value="">🔽 Selecione...</option>
                     </select>
                     <p class="text-[10px] text-slate-500 mt-1">Código de barras do volume</p>
                 </div>
             </div>
 
-            <!-- Preview dos dados -->
+            <!-- Preview -->
             <div id="preview-area" class="hidden mt-4">
                 <h4 class="text-sm font-semibold text-slate-300 mb-2">👁️ Preview dos dados</h4>
                 <div class="overflow-x-auto max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-2">
@@ -92,7 +93,7 @@
                         <tbody id="preview-body"></tbody>
                     </table>
                 </div>
-                <p class="text-[10px] text-slate-500 mt-2">Mostrando as primeiras 5 linhas do arquivo</p>
+                <p class="text-[10px] text-slate-500 mt-2">Mostrando as primeiras 5 linhas após processamento</p>
             </div>
 
             <button id="btnImportar" class="w-full mt-4 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
@@ -109,35 +110,22 @@
         // ==========================================================
 
         let dadosBrutos = [];
+        let dadosProcessados = [];
         let colunasArquivo = [];
         let dadosParsed = [];
-        let mapeamentoSalvo = {};
 
         // ==========================================================
-        // MAPEAMENTO DE SINÔNIMOS
+        // SINÔNIMOS
         // ==========================================================
 
         const sinonimos = {
-            nr: [
-                'nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 
-                'etiqueta', 'codigo_nr', 'n°', 'codigo_de_barras', 
-                'codigo barras', 'chave nf', 'nf-e', 'nfe', 'codigo_de_barras_do_nf-e',
-                'codigo barras nf-e', 'codigo de barras do nf-e'
-            ],
-            nf: [
-                'nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 
-                'nfe', 'documento', 'nota fiscal', 'numero_nota'
-            ],
-            volume_clie: [
-                'volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 
-                'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment', 
-                'nvolume', 'nv', 'codigo_barras', 'nv'
-            ]
+            nr: ['nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 'etiqueta', 'codigo_nr', 'n°', 'codigo_de_barras', 'codigo barras', 'chave nf', 'nf-e', 'nfe', 'codigo_de_barras_do_nf-e', 'codigo barras nf-e'],
+            nf: ['nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 'nfe', 'documento', 'nota fiscal', 'numero_nota'],
+            volume_clie: ['volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment', 'nvolume', 'nv', 'codigo_barras']
         };
 
         function detectarColuna(nomeColuna) {
             const nomeLower = nomeColuna.toLowerCase().trim();
-            
             for (const [campo, sinList] of Object.entries(sinonimos)) {
                 for (const sin of sinList) {
                     if (nomeLower === sin || nomeLower.includes(sin) || sin.includes(nomeLower)) {
@@ -146,6 +134,35 @@
                 }
             }
             return null;
+        }
+
+
+        // ==========================================================
+        // PROCESSAMENTO DOS DADOS (IGUAL AO VBA)
+        // ==========================================================
+
+        function processarDadosVBA(dados) {
+            // PASSO 1: TODAS AS COLUNAS COMO TEXTO (já é padrão no parse)
+            
+            // PASSO 2: REMOVER LINHAS 0 E 1 (cabeçalho duplo)
+            // No VBA: wsOrigem.Rows(1).Delete (2 vezes)
+            // Aqui: removemos as 2 primeiras linhas
+            let dadosSemCabecalho = dados.slice(2);
+            
+            // PASSO 3: FILTRAR COLUNA B (remover linhas com "C")
+            // No VBA: Filtrar coluna B, Criteria1:="<>C"
+            // Aqui: removemos linhas onde a coluna B (índice 1) for "C"
+            const dadosFiltrados = dadosSemCabecalho.filter(row => {
+                const colB = Object.values(row)[1] || '';
+                return colB !== 'C';
+            });
+            
+            console.log('📊 Processamento VBA aplicado:');
+            console.log(`   - Linhas originais: ${dados.length}`);
+            console.log(`   - Após remover cabeçalho: ${dadosSemCabecalho.length}`);
+            console.log(`   - Após filtrar coluna B: ${dadosFiltrados.length}`);
+            
+            return dadosFiltrados;
         }
 
 
@@ -164,6 +181,9 @@
             status.textContent = "⏳ Lendo arquivo...";
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
+            // Mostra que as regras VBA serão aplicadas
+            document.getElementById('regras-area').classList.remove('hidden');
+
             if (isExcel) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
@@ -171,10 +191,12 @@
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
                         
                         dadosBrutos = jsonData;
-                        processarArquivo(jsonData);
+                        // Aplica as regras do VBA
+                        dadosProcessados = processarDadosVBA(jsonData);
+                        processarArquivo(dadosProcessados);
                     } catch (err) {
                         console.error('❌ Erro:', err);
                         status.textContent = "❌ Erro ao ler arquivo: " + err.message;
@@ -186,9 +208,11 @@
                 Papa.parse(file, {
                     header: true,
                     skipEmptyLines: true,
+                    dynamicTyping: false, // TUDO COMO TEXTO
                     complete: function(results) {
                         dadosBrutos = results.data;
-                        processarArquivo(results.data);
+                        dadosProcessados = processarDadosVBA(results.data);
+                        processarArquivo(dadosProcessados);
                     }
                 });
             }
@@ -208,7 +232,7 @@
 
             colunasArquivo = Object.keys(data[0]);
             
-            // Detecta mapeamento automático
+            // Detecta mapeamento
             const map = { nr: null, nf: null, volume_clie: null };
             const detectados = { nr: false, nf: false, volume_clie: false };
 
@@ -220,13 +244,13 @@
                 }
             }
 
-            // Preenche os selects
+            // Preenche selects
             const selectNR = document.getElementById('map-nr');
             const selectNF = document.getElementById('map-nf');
             const selectVOL = document.getElementById('map-volume');
 
             [selectNR, selectNF, selectVOL].forEach(sel => {
-                sel.innerHTML = '<option value="">🔽 Selecione a coluna...</option>';
+                sel.innerHTML = '<option value="">🔽 Selecione...</option>';
                 colunasArquivo.forEach(col => {
                     const opt = document.createElement('option');
                     opt.value = col;
@@ -258,11 +282,14 @@
             atualizarPreview(data);
 
             const detectadas = Object.values(detectados).filter(Boolean).length;
-            document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. ${detectadas} colunas detectadas automaticamente. Confirme o mapeamento abaixo.`;
+            document.getElementById('status').textContent = `📊 ${data.length} registros processados (regras VBA aplicadas). ${detectadas} colunas detectadas.`;
             document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
 
-            // Salva mapeamento para reuso
-            mapeamentoSalvo = { nr: map.nr, nf: map.nf, volume_clie: map.volume_clie };
+            document.getElementById('map-nr').onchange = () => atualizarDadosPreview();
+            document.getElementById('map-nf').onchange = () => atualizarDadosPreview();
+            document.getElementById('map-volume').onchange = () => atualizarDadosPreview();
+            
+            atualizarDadosPreview();
         }
 
 
@@ -289,12 +316,6 @@
             body.innerHTML = rows.map(row => {
                 return `<tr class="border-b border-slate-700/50">${cols.map(c => `<td class="px-2 py-1 text-slate-300 font-mono text-[10px]">${row[c] || '-'}</td>`).join('')}</tr>`;
             }).join('');
-
-            document.getElementById('map-nr').onchange = () => atualizarDadosPreview();
-            document.getElementById('map-nf').onchange = () => atualizarDadosPreview();
-            document.getElementById('map-volume').onchange = () => atualizarDadosPreview();
-            
-            atualizarDadosPreview();
         }
 
 
@@ -315,7 +336,7 @@
 
             const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
 
-            dadosParsed = dadosBrutos.map(row => ({
+            dadosParsed = dadosProcessados.map(row => ({
                 nr: limpaStr(row[colNR] || ''),
                 nf: colNF ? limpaStr(row[colNF] || '') : '',
                 volume_clie: limpaStr(row[colVOL] || '')
@@ -382,8 +403,7 @@
             }
         });
 
-        console.log('📥 Importador com mapeamento inteligente carregado');
-        console.log('🔀 Sinônimos reconhecidos:', sinonimos);
+        console.log('📥 Importador com regras VBA carregado');
     </script>
 
 </body>
