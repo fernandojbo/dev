@@ -10,13 +10,28 @@
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
     </script>
+    <style>
+        .campo-obrigatorio::after {
+            content: " *";
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .detectado {
+            background-color: rgba(52, 211, 153, 0.15);
+            border-color: rgba(52, 211, 153, 0.3);
+        }
+        .nao-detectado {
+            background-color: rgba(251, 191, 36, 0.08);
+            border-color: rgba(251, 191, 36, 0.2);
+        }
+    </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
 
     <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-slate-700">
         <h2 class="text-2xl font-bold mb-2 text-white">📥 Importar Dados</h2>
         <p class="text-slate-400 text-sm mb-6">
-            Selecione o arquivo e faça o mapeamento das colunas.
+            Selecione o arquivo e indique quais colunas correspondem aos dados do sistema.
         </p>
 
         <!-- Upload do arquivo -->
@@ -31,33 +46,44 @@
 
         <!-- Área de Mapeamento -->
         <div id="mapeamento-area" class="hidden mt-6">
-            <h3 class="text-md font-semibold text-white mb-3">🔀 Mapeamento de Colunas</h3>
-            <p class="text-xs text-slate-400 mb-3">Selecione qual coluna do arquivo corresponde a cada campo do sistema:</p>
+            <div class="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3 mb-4">
+                <p class="text-xs text-amber-300">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    <strong>Como funciona:</strong> Selecione em cada campo abaixo qual coluna do seu arquivo corresponde aos dados que deseja importar.
+                    <span class="text-amber-400 font-semibold">Campos com * são obrigatórios.</span>
+                </p>
+            </div>
 
-            <div class="grid grid-cols-3 gap-3 mb-4">
+            <h3 class="text-md font-semibold text-white mb-3">🔀 Mapeamento de Colunas</h3>
+            <p class="text-xs text-slate-400 mb-3">Colunas em <span class="text-emerald-400">verde</span> foram detectadas automaticamente. Confirme se está correto.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">📋 NR (Etiqueta)</label>
+                    <label class="block text-xs text-slate-400 mb-1 campo-obrigatorio">📋 NR (Etiqueta)</label>
                     <select id="map-nr" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                        <option value="">Selecione...</option>
+                        <option value="">🔽 Selecione a coluna...</option>
                     </select>
+                    <p class="text-[10px] text-slate-500 mt-1">Código da etiqueta da transportadora</p>
                 </div>
                 <div>
                     <label class="block text-xs text-slate-400 mb-1">📄 NF (Nota Fiscal)</label>
                     <select id="map-nf" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                        <option value="">Selecione...</option>
+                        <option value="">🔽 Selecione a coluna...</option>
                     </select>
+                    <p class="text-[10px] text-slate-500 mt-1">Número da nota fiscal (opcional)</p>
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">📦 VOLUME_CLIE</label>
+                    <label class="block text-xs text-slate-400 mb-1 campo-obrigatorio">📦 VOLUME_CLIE</label>
                     <select id="map-volume" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
-                        <option value="">Selecione...</option>
+                        <option value="">🔽 Selecione a coluna...</option>
                     </select>
+                    <p class="text-[10px] text-slate-500 mt-1">Código de barras do volume</p>
                 </div>
             </div>
 
             <!-- Preview dos dados -->
             <div id="preview-area" class="hidden mt-4">
-                <h4 class="text-sm font-semibold text-slate-300 mb-2">👁️ Preview dos dados (primeiras 5 linhas)</h4>
+                <h4 class="text-sm font-semibold text-slate-300 mb-2">👁️ Preview dos dados</h4>
                 <div class="overflow-x-auto max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-2">
                     <table class="w-full text-xs" id="preview-table">
                         <thead class="text-slate-400 border-b border-slate-700">
@@ -66,6 +92,7 @@
                         <tbody id="preview-body"></tbody>
                     </table>
                 </div>
+                <p class="text-[10px] text-slate-500 mt-2">Mostrando as primeiras 5 linhas do arquivo</p>
             </div>
 
             <button id="btnImportar" class="w-full mt-4 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
@@ -84,15 +111,28 @@
         let dadosBrutos = [];
         let colunasArquivo = [];
         let dadosParsed = [];
+        let mapeamentoSalvo = {};
 
         // ==========================================================
-        // MAPEAMENTO DE SINÔNIMOS (DE/PARA INTELIGENTE)
+        // MAPEAMENTO DE SINÔNIMOS
         // ==========================================================
 
         const sinonimos = {
-            nr: ['nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 'etiqueta', 'codigo_nr', 'n°'],
-            nf: ['nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 'nfe', 'documento'],
-            volume_clie: ['volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment']
+            nr: [
+                'nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 
+                'etiqueta', 'codigo_nr', 'n°', 'codigo_de_barras', 
+                'codigo barras', 'chave nf', 'nf-e', 'nfe', 'codigo_de_barras_do_nf-e',
+                'codigo barras nf-e', 'codigo de barras do nf-e'
+            ],
+            nf: [
+                'nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 
+                'nfe', 'documento', 'nota fiscal', 'numero_nota'
+            ],
+            volume_clie: [
+                'volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 
+                'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment', 
+                'nvolume', 'nv', 'codigo_barras', 'nv'
+            ]
         };
 
         function detectarColuna(nomeColuna) {
@@ -166,20 +206,17 @@
                 return;
             }
 
-            // Extrai colunas
             colunasArquivo = Object.keys(data[0]);
             
             // Detecta mapeamento automático
-            const map = {
-                nr: null,
-                nf: null,
-                volume_clie: null
-            };
+            const map = { nr: null, nf: null, volume_clie: null };
+            const detectados = { nr: false, nf: false, volume_clie: false };
 
             for (const col of colunasArquivo) {
                 const detected = detectarColuna(col);
                 if (detected && !map[detected]) {
                     map[detected] = col;
+                    detectados[detected] = true;
                 }
             }
 
@@ -189,7 +226,7 @@
             const selectVOL = document.getElementById('map-volume');
 
             [selectNR, selectNF, selectVOL].forEach(sel => {
-                sel.innerHTML = '<option value="">Selecione...</option>';
+                sel.innerHTML = '<option value="">🔽 Selecione a coluna...</option>';
                 colunasArquivo.forEach(col => {
                     const opt = document.createElement('option');
                     opt.value = col;
@@ -198,19 +235,34 @@
                 });
             });
 
-            // Seleciona valores detectados
-            if (map.nr) selectNR.value = map.nr;
-            if (map.nf) selectNF.value = map.nf;
-            if (map.volume_clie) selectVOL.value = map.volume_clie;
+            if (map.nr) {
+                selectNR.value = map.nr;
+                selectNR.className = 'w-full bg-slate-700 border border-emerald-500/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 detectado';
+            } else {
+                selectNR.className = 'w-full bg-slate-700 border border-yellow-500/30 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 nao-detectado';
+            }
 
-            // Mostra área de mapeamento
+            if (map.nf) {
+                selectNF.value = map.nf;
+                selectNF.className = 'w-full bg-slate-700 border border-emerald-500/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 detectado';
+            }
+
+            if (map.volume_clie) {
+                selectVOL.value = map.volume_clie;
+                selectVOL.className = 'w-full bg-slate-700 border border-emerald-500/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 detectado';
+            } else {
+                selectVOL.className = 'w-full bg-slate-700 border border-yellow-500/30 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 nao-detectado';
+            }
+
             document.getElementById('mapeamento-area').classList.remove('hidden');
-            
-            // Atualiza preview
             atualizarPreview(data);
 
-            document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. Configure o mapeamento abaixo.`;
+            const detectadas = Object.values(detectados).filter(Boolean).length;
+            document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. ${detectadas} colunas detectadas automaticamente. Confirme o mapeamento abaixo.`;
             document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
+
+            // Salva mapeamento para reuso
+            mapeamentoSalvo = { nr: map.nr, nf: map.nf, volume_clie: map.volume_clie };
         }
 
 
@@ -230,25 +282,24 @@
 
             previewArea.classList.remove('hidden');
 
-            // Cabeçalho
             const cols = Object.keys(data[0]);
-            header.innerHTML = cols.map(c => `<th class="px-2 py-1 text-left text-slate-400">${c}</th>`).join('');
+            header.innerHTML = cols.map(c => `<th class="px-2 py-1 text-left text-slate-400 font-normal">${c}</th>`).join('');
 
-            // Corpo (primeiras 5 linhas)
             const rows = data.slice(0, 5);
             body.innerHTML = rows.map(row => {
                 return `<tr class="border-b border-slate-700/50">${cols.map(c => `<td class="px-2 py-1 text-slate-300 font-mono text-[10px]">${row[c] || '-'}</td>`).join('')}</tr>`;
             }).join('');
 
-            // Atualiza preview quando mudar selects
             document.getElementById('map-nr').onchange = () => atualizarDadosPreview();
             document.getElementById('map-nf').onchange = () => atualizarDadosPreview();
             document.getElementById('map-volume').onchange = () => atualizarDadosPreview();
+            
+            atualizarDadosPreview();
         }
 
 
         // ==========================================================
-        // ATUALIZAR DADOS PREVIEW (com colunas selecionadas)
+        // ATUALIZAR DADOS PREVIEW
         // ==========================================================
 
         function atualizarDadosPreview() {
@@ -270,14 +321,13 @@
                 volume_clie: limpaStr(row[colVOL] || '')
             })).filter(row => row.volume_clie !== '' && row.nr !== '');
 
-            // Atualiza preview com colunas mapeadas
             const header = document.getElementById('preview-header');
             const body = document.getElementById('preview-body');
             
             const colsMap = ['nr', 'nf', 'volume_clie'];
-            const labels = ['NR', 'NF', 'VOLUME_CLIE'];
+            const labels = ['📋 NR (Etiqueta)', '📄 NF', '📦 VOLUME_CLIE'];
             
-            header.innerHTML = labels.map(l => `<th class="px-2 py-1 text-left text-amber-400">${l}</th>`).join('');
+            header.innerHTML = labels.map(l => `<th class="px-2 py-1 text-left text-amber-400 font-semibold">${l}</th>`).join('');
 
             const rows = dadosParsed.slice(0, 5);
             body.innerHTML = rows.map(row => {
@@ -290,7 +340,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR PARA O SUPABASE
+        // FUNÇÃO PARA IMPORTAR
         // ==========================================================
 
         document.getElementById('btnImportar').addEventListener('click', async function() {
