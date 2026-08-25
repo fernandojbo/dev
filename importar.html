@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Importação de Conferência - FreteOnX</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
@@ -11,262 +13,152 @@
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
 
-    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-slate-700">
-        <h2 class="text-2xl font-bold mb-2 text-white">📥 Importar Dados</h2>
+    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-lg border border-slate-700">
+        <h2 class="text-2xl font-bold mb-2 text-white">Importar Dados</h2>
         <p class="text-slate-400 text-sm mb-6">
-            Selecione o arquivo <strong>.sswweb</strong> ou <strong>.csv</strong> exportado do sistema.
+            O arquivo CSV ou XLSX deve conter as colunas: <code class="bg-slate-900 px-1 rounded">NR, NF, VOLUME_CLIE</code>.
         </p>
 
-        <!-- Upload -->
-        <div class="border-2 border-dashed border-slate-600 rounded-xl p-6 text-center hover:border-amber-500 transition-colors">
-            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx,.sswweb,.txt" class="hidden">
-            <label for="fileInput" class="cursor-pointer block">
-                <span class="text-4xl block mb-2">📂</span>
-                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar o arquivo</span>
+        <div class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-amber-500 transition-colors">
+            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" class="hidden">
+            <label for="fileInput" class="cursor-pointer">
+                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV ou XLSX</span>
                 <span id="fileName" class="text-xs text-slate-500">Nenhum arquivo escolhido</span>
             </label>
         </div>
 
-        <!-- Status -->
-        <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
-
-        <!-- Regras aplicadas -->
-        <div id="regras-area" class="hidden mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-            <h4 class="text-xs font-semibold text-blue-300 mb-2">⚙️ Regras aplicadas (como no VBA):</h4>
-            <ul class="text-xs text-slate-300 space-y-1">
-                <li id="regra-linhas" class="flex items-center gap-2">🔹 <span>Removidas linhas 0 e 1 (cabeçalho duplo)</span></li>
-                <li id="regra-filtro" class="flex items-center gap-2">🔹 <span>Removidas linhas com "C" na coluna B</span></li>
-                <li id="regra-colunas" class="flex items-center gap-2">🔹 <span>Separador: ponto e vírgula (;)</span></li>
-            </ul>
-        </div>
-
-        <!-- Preview -->
-        <div id="preview-area" class="hidden mt-4">
-            <h4 class="text-sm font-semibold text-slate-300 mb-2">👁️ Preview dos dados processados</h4>
-            <div class="overflow-x-auto max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-2">
-                <table class="w-full text-xs" id="preview-table">
-                    <thead class="text-slate-400 border-b border-slate-700">
-                        <tr id="preview-header"></tr>
-                    </thead>
-                    <tbody id="preview-body"></tbody>
-                </table>
-            </div>
-            <p class="text-[10px] text-slate-500 mt-2">Mostrando as primeiras 5 linhas após processamento</p>
-        </div>
-
-        <!-- Botão Importar -->
-        <button id="btnImportar" class="hidden w-full mt-4 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
-            🚀 Importar Dados
+        <button id="btnImportar" class="w-full mt-6 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
+            Iniciar Importação
         </button>
+        
+        <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
     </div>
 
     <script>
-        // ==========================================================
-        // VARIÁVEIS
-        // ==========================================================
-
-        let dadosProcessados = [];
-        let colunasDetectadas = [];
-
-        // ==========================================================
-        // FUNÇÃO PARA PROCESSAR ARQUIVO (IGUAL AO VBA)
-        // ==========================================================
-
-        function processarArquivoVBA(conteudo) {
-            // PASSO 1: Separar por linhas
-            const linhas = conteudo.split(/\r\n|\n/);
-            
-            // PASSO 2: Remover linhas vazias
-            const linhasFiltradas = linhas.filter(line => line.trim() !== '');
-            
-            console.log(`📊 Linhas originais: ${linhas.length}`);
-            console.log(`📊 Linhas não vazias: ${linhasFiltradas.length}`);
-
-            // PASSO 3: REMOVER LINHAS 0 E 1 (cabeçalho duplo)
-            // No VBA: wsOrigem.Rows(1).Delete (2 vezes)
-            const semCabecalho = linhasFiltradas.slice(2);
-            
-            console.log(`📊 Após remover cabeçalho: ${semCabecalho.length}`);
-
-            // PASSO 4: Separar por ponto e vírgula
-            const dados = semCabecalho.map(line => line.split(';'));
-
-            // PASSO 5: FILTRAR COLUNA B (remover linhas com "C")
-            // No VBA: Filtrar coluna B, Criteria1:="<>C"
-            const dadosFiltrados = dados.filter(row => {
-                const colB = row[1] || '';
-                return colB !== 'C';
-            });
-
-            console.log(`📊 Após filtrar coluna B: ${dadosFiltrados.length}`);
-
-            return dadosFiltrados;
-        }
-
-        // ==========================================================
-        // DETECTAR COLUNAS
-        // ==========================================================
-
-        function detectarColunas(dados) {
-            if (!dados || dados.length === 0) return [];
-            
-            // Pega a primeira linha como cabeçalho
-            const cabecalho = dados[0] || [];
-            
-            return cabecalho.map((col, index) => ({
-                index: index,
-                nome: col || `Coluna ${index + 1}`,
-                valor: col
-            }));
-        }
-
-        // ==========================================================
-        // LEITURA DO ARQUIVO
-        // ==========================================================
-
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            document.getElementById('fileName').textContent = file?.name || 'Nenhum arquivo';
-            
-            if (!file) return;
-
-            const status = document.getElementById('status');
-            status.textContent = "⏳ Lendo arquivo...";
-            status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
-
-            // Mostra as regras
-            document.getElementById('regras-area').classList.remove('hidden');
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const conteudo = e.target.result;
-                    
-                    // Processa como VBA
-                    const dadosProcessadosVBA = processarArquivoVBA(conteudo);
-                    
-                    if (!dadosProcessadosVBA || dadosProcessadosVBA.length === 0) {
-                        status.textContent = "❌ Nenhum dado válido encontrado no arquivo!";
-                        status.className = "mt-4 text-center text-red-400 font-semibold";
-                        return;
-                    }
-
-                    dadosProcessados = dadosProcessadosVBA;
-                    colunasDetectadas = detectarColunas(dadosProcessados);
-
-                    // Mostra preview
-                    mostrarPreview(dadosProcessados);
-                    
-                    // Mostra botão importar
-                    document.getElementById('btnImportar').classList.remove('hidden');
-
-                    status.textContent = `✅ ${dadosProcessados.length - 1} registros processados (regras VBA aplicadas).`;
-                    status.className = "mt-4 text-center text-sm font-semibold text-emerald-400";
-
-                } catch (err) {
-                    console.error('❌ Erro:', err);
-                    status.textContent = "❌ Erro ao processar arquivo: " + err.message;
-                    status.className = "mt-4 text-center text-red-400 font-semibold";
-                }
-            };
-
-            reader.readAsText(file, 'UTF-8');
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            document.getElementById('fileName').textContent = e.target.files[0]?.name || 'Nenhum arquivo';
         });
 
-
-        // ==========================================================
-        // MOSTRAR PREVIEW
-        // ==========================================================
-
-        function mostrarPreview(dados) {
-            const previewArea = document.getElementById('preview-area');
-            const header = document.getElementById('preview-header');
-            const body = document.getElementById('preview-body');
-
-            if (!dados || dados.length === 0) {
-                previewArea.classList.add('hidden');
-                return;
-            }
-
-            previewArea.classList.remove('hidden');
-
-            // Cabeçalho (primeira linha)
-            const cabecalho = dados[0] || [];
-            header.innerHTML = cabecalho.map(col => 
-                `<th class="px-2 py-1 text-left text-amber-400 font-semibold text-[10px]">${col || '-'}</th>`
-            ).join('');
-
-            // Corpo (próximas 5 linhas)
-            const rows = dados.slice(1, 6);
-            body.innerHTML = rows.map(row => {
-                return `<tr class="border-b border-slate-700/50">${row.map(cell => 
-                    `<td class="px-2 py-1 text-slate-300 font-mono text-[10px]">${cell || '-'}</td>`
-                ).join('')}</tr>`;
-            }).join('');
-
-            // Atualiza contagem
-            document.getElementById('status').textContent = 
-                `📊 ${dados.length - 1} registros processados. Colunas: ${cabecalho.length}`;
-        }
-
-
-        // ==========================================================
-        // FUNÇÃO PARA IMPORTAR
-        // ==========================================================
-
-        document.getElementById('btnImportar').addEventListener('click', async function() {
+        document.getElementById('btnImportar').addEventListener('click', () => {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return alert('Selecione um arquivo!');
+            
             const btn = document.getElementById('btnImportar');
             const status = document.getElementById('status');
-
-            if (!dadosProcessados || dadosProcessados.length < 2) {
-                alert('⚠️ Nenhum dado válido para importar!');
-                return;
-            }
-
-            // Pega cabeçalho para identificar colunas
-            const cabecalho = dadosProcessados[0] || [];
-            
-            // Tenta identificar as colunas NR, NF, VOLUME_CLIE
-            const idxNR = cabecalho.findIndex(c => 
-                c && (c.toLowerCase().includes('nr') || c.toLowerCase().includes('n°') || c.toLowerCase().includes('etiqueta'))
-            );
-            const idxNF = cabecalho.findIndex(c => 
-                c && (c.toLowerCase().includes('nf') || c.toLowerCase().includes('nota fiscal') || c.toLowerCase().includes('nota'))
-            );
-            const idxVOL = cabecalho.findIndex(c => 
-                c && (c.toLowerCase().includes('volume') || c.toLowerCase().includes('vol') || c.toLowerCase().includes('clie'))
-            );
-
-            if (idxNR === -1 || idxVOL === -1) {
-                alert('⚠️ Não foi possível identificar as colunas NR e VOLUME_CLIE no arquivo.\n\nVerifique se o arquivo tem colunas com "NR", "VOLUME", "ETIQUETA" ou "NF".');
-                return;
-            }
-
-            // Monta os dados para importar
-            const dadosImportar = dadosProcessados.slice(1).map(row => ({
-                nr: (row[idxNR] || '').replace(/[^0-9A-Za-z]/g, '').trim(),
-                nf: idxNF !== -1 ? (row[idxNF] || '').replace(/[^0-9A-Za-z]/g, '').trim() : '',
-                volume_clie: (row[idxVOL] || '').replace(/[^0-9A-Za-z]/g, '').trim()
-            })).filter(row => row.nr !== '' && row.volume_clie !== '');
-
-            if (dadosImportar.length === 0) {
-                alert('⚠️ Nenhum dado válido para importar! Verifique se as colunas estão corretas.');
-                return;
-            }
-
             btn.disabled = true;
-            btn.textContent = '⏳ Importando...';
-            status.textContent = "⏳ Importando...";
+            status.textContent = "Processando...";
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
+            const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
+
+            // ==========================================================
+            // DETECTA SE É EXCEL (XLS ou XLSX)
+            // ==========================================================
+            const isExcel = file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
+
+            if (isExcel) {
+                // ==========================================================
+                // LEITURA DE ARQUIVO EXCEL (XLS / XLSX)
+                // ==========================================================
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                        console.log('📊 Dados lidos do Excel:', jsonData);
+
+                        // Mapeia os dados
+                        const parsedData = jsonData
+                            .map(row => {
+                                // Procura as colunas (case insensitive)
+                                const keys = Object.keys(row);
+                                const findKey = (nome) => keys.find(k => k.toLowerCase().trim() === nome.toLowerCase().trim());
+                                
+                                const keyNR = findKey('nr');
+                                const keyNF = findKey('nf');
+                                const keyVOL = findKey('volume_clie');
+
+                                return {
+                                    nr: limpaStr(row[keyNR] || ''),
+                                    nf: limpaStr(row[keyNF] || ''),
+                                    volume_clie: limpaStr(row[keyVOL] || '')
+                                };
+                            })
+                            .filter(row => row.volume_clie !== '' && row.nr !== '');
+
+                        console.log('📦 Dados parseados:', parsedData);
+
+                        if (parsedData.length === 0) {
+                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no arquivo.";
+                            status.className = "mt-4 text-center text-red-400 font-semibold";
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        importarDados(parsedData, status, btn);
+                    } catch (err) {
+                        console.error('❌ Erro:', err);
+                        status.textContent = "❌ Erro ao ler arquivo: " + err.message;
+                        status.className = "mt-4 text-center text-red-400 font-semibold";
+                        btn.disabled = false;
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                // ==========================================================
+                // LEITURA DE ARQUIVO CSV (PapaParse)
+                // ==========================================================
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        const data = results.data
+                            .map(row => {
+                                const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
+                                return {
+                                    nr: limpaStr(row.NR || row.nr),
+                                    nf: limpaStr(row.NF || row.nf),
+                                    volume_clie: limpaStr(row.VOLUME_CLIE || row.volume_clie)
+                                };
+                            })
+                            .filter(row => row.volume_clie !== '' && row.nr !== '');
+
+                        if (data.length === 0) {
+                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no CSV.";
+                            status.className = "mt-4 text-center text-red-400 font-semibold";
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        await importarDados(data, status, btn);
+                    }
+                });
+            }
+        });
+
+        // ==========================================================
+        // FUNÇÃO PARA IMPORTAR PARA O SUPABASE (SEM onConflict)
+        // ==========================================================
+        async function importarDados(data, status, btn) {
             try {
+                console.log('📤 Enviando para Supabase:', data);
+
+                // Usa insert() em vez de upsert() para evitar erro de constraint
                 const { data: resultado, error } = await window.supabaseClient
                     .from('conferencia')
-                    .insert(dadosImportar);
+                    .insert(data);
 
-                if (error) throw error;
+                if (error) {
+                    console.error('❌ Erro do Supabase:', error);
+                    throw error;
+                }
 
-                status.textContent = `✅ Importação concluída! ${dadosImportar.length} registros importados.`;
+                console.log('✅ Importado com sucesso:', resultado);
+                
+                status.textContent = `✅ Importação concluída! (${data.length} registros)`;
                 status.className = "mt-4 text-center text-green-400 font-semibold";
             } catch (err) {
                 console.error('❌ Erro ao importar:', err);
@@ -274,12 +166,8 @@
                 status.className = "mt-4 text-center text-red-400 font-semibold";
             } finally {
                 btn.disabled = false;
-                btn.textContent = '🚀 Importar Dados';
             }
-        });
-
-        console.log('📥 Importador com regras VBA (modo texto) carregado');
+        }
     </script>
-
 </body>
 </html>
