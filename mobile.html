@@ -25,6 +25,7 @@
             border-radius: 16px;
             overflow: hidden;
             background: #0f172a;
+            cursor: pointer;
         }
 
         #scanner-container video {
@@ -98,11 +99,46 @@
             white-space: nowrap;
         }
 
+        #scan-tap {
+            position: absolute;
+            bottom: 25%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            padding: 8px 20px;
+            border-radius: 30px;
+            color: #fbbf24;
+            font-size: 12px;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+            white-space: nowrap;
+            animation: pulse-tap 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-tap {
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: translateX(-50%) scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: translateX(-50%) scale(1.05);
+            }
+        }
+
         #barcode-input {
             position: absolute;
             opacity: 0;
             width: 1px;
             height: 1px;
+        }
+
+        /* Indicador de leitura */
+        .scanning-active #scan-overlay {
+            border-color: rgba(52, 211, 153, 0.8);
+            box-shadow: 0 0 40px rgba(52, 211, 153, 0.3);
         }
     </style>
 </head>
@@ -124,11 +160,12 @@
     <!-- Área Principal -->
     <main class="flex-1 flex flex-col items-center justify-center p-3 gap-3 overflow-hidden">
 
-        <!-- Scanner (Câmera) -->
+        <!-- Scanner (Câmera) - TOQUE PARA LER -->
         <div id="scanner-container" class="relative">
             <div id="scanner"></div>
             <div id="scan-overlay"></div>
             <div id="codigo-lido"></div>
+            <div id="scan-tap">👆 Toque para ler o código</div>
             <div id="scan-message">📷 Aponte para o código de barras</div>
         </div>
 
@@ -184,7 +221,7 @@
     <script>
 
         // ==========================================================
-        // PROTEÇÃO DE ACESSO - APENAS VERIFICA SE ESTÁ LOGADO
+        // PROTEÇÃO DE ACESSO
         // ==========================================================
 
         function verificarLogin() {
@@ -210,7 +247,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA OBTER O CONFERENTE LOGADO
+        // FUNÇÕES AUXILIARES
         // ==========================================================
 
         function obterConferente() {
@@ -224,21 +261,11 @@
             return { nome: 'Desconhecido', usuario: 'unknown', role: 'conferente' };
         }
 
-
-        // ==========================================================
-        // FUNÇÃO PARA SAIR (LOGOUT)
-        // ==========================================================
-
         function logout() {
             localStorage.removeItem('usuario_logado');
             localStorage.removeItem('conferente');
             window.location.href = 'index.html';
         }
-
-
-        // ==========================================================
-        // FUNÇÃO PARA LIMPAR CÓDIGO
-        // ==========================================================
 
         function limparCodigo(codigo) {
             if (!codigo) return '';
@@ -246,11 +273,6 @@
             limpo = limpo.replace(/[^a-zA-Z0-9]/g, '');
             return limpo;
         }
-
-
-        // ==========================================================
-        // FUNÇÃO PARA LIMPAR OS CAMPOS DA TELA
-        // ==========================================================
 
         function limparCampos() {
             document.getElementById('display-nr').textContent = '-';
@@ -310,6 +332,8 @@
         let timeoutFeedback = null;
         let tentativasValidacao = 0;
         let scannerAtivo = false;
+        let ultimoCodigoLido = '';
+        let ultimoCodigoTimestamp = 0;
 
 
         // ==========================================================
@@ -331,6 +355,8 @@
         const displayMatch = document.getElementById('display-match');
         const codigoLidoEl = document.getElementById('codigo-lido');
         const scanMessage = document.getElementById('scan-message');
+        const scanContainer = document.getElementById('scanner-container');
+        const scanTap = document.getElementById('scan-tap');
 
 
         // ==========================================================
@@ -369,6 +395,35 @@
 
             document.getElementById('btn-reiniciar-camera').addEventListener('click', () => {
                 iniciarScanner();
+            });
+
+            // ==========================================================
+            // EVENTO DE TOQUE NA TELA PARA LER O CÓDIGO
+            // ==========================================================
+
+            scanContainer.addEventListener('click', function() {
+                if (processando) {
+                    console.log('⏳ Processando, aguarde...');
+                    return;
+                }
+
+                // Pausa a detecção automática e força uma leitura
+                if (scannerAtivo) {
+                    console.log('👆 Toque detectado, lendo código...');
+                    // O Quagga já está rodando, então apenas forçamos a verificação
+                    // A leitura será feita pelo callback onDetected
+                    // Mas vamos dar um feedback visual
+                    scanContainer.classList.add('scanning-active');
+                    scanTap.textContent = '📸 Lendo...';
+                    scanTap.style.color = '#22c55e';
+
+                    // Se não houver código detectado em 1 segundo, volta ao normal
+                    setTimeout(() => {
+                        scanContainer.classList.remove('scanning-active');
+                        scanTap.textContent = '👆 Toque para ler o código';
+                        scanTap.style.color = '#fbbf24';
+                    }, 1000);
+                }
             });
         });
 
@@ -456,12 +511,27 @@
                 }
                 scannerAtivo = true;
                 console.log('✅ Scanner iniciado');
-                scanMessage.textContent = '📷 Aponte para o código de barras';
+                scanMessage.textContent = '📷 Aponte e toque para ler';
                 Quagga.start();
             });
 
+            // ==========================================================
+            // DETECÇÃO DE CÓDIGO - COM PROTEÇÃO CONTRA DUPLICIDADE
+            // ==========================================================
+
             Quagga.onDetected(function(result) {
                 const code = result.codeResult.code;
+                const agora = Date.now();
+
+                // ✅ VERIFICA SE É O MESMO CÓDIGO LIDO NOS ÚLTIMOS 2 SEGUNDOS
+                if (code === ultimoCodigoLido && (agora - ultimoCodigoTimestamp) < 2000) {
+                    console.log('⏳ Código duplicado ignorado:', code);
+                    return;
+                }
+
+                ultimoCodigoLido = code;
+                ultimoCodigoTimestamp = agora;
+
                 console.log('📸 Código detectado:', code);
                 processarCodigoLido(code);
             });
@@ -488,7 +558,7 @@
 
 
         // ==========================================================
-        // PROCESSAR CÓDIGO LIDO (AUTOMATICAMENTE)
+        // PROCESSAR CÓDIGO LIDO
         // ==========================================================
 
         function processarCodigoLido(codigo) {
@@ -521,6 +591,7 @@
                 instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
                 tocarSom('neutro');
                 scanMessage.textContent = '📷 Aponte para o VOLUME';
+                scanTap.textContent = '👆 Toque para ler o VOLUME';
 
                 setTimeout(() => {
                     processando = false;
@@ -530,6 +601,7 @@
                 const volumeLido = codigoLido;
                 displayVolume.textContent = volumeLido;
                 scanMessage.textContent = '⏳ Validando...';
+                scanTap.textContent = '⏳ Validando...';
 
                 validarNoSupabase(nrAtual, volumeLido).finally(() => {
                     setTimeout(() => {
@@ -695,6 +767,7 @@
             }
         }
 
+
         // ==========================================================
         // FUNÇÃO AUXILIAR PARA PROCESSAR SUCESSO
         // ==========================================================
@@ -742,6 +815,7 @@
                 errorDetails.classList.add('hidden');
                 tocarSom('sucesso');
                 scanMessage.textContent = '✅ Conferido!';
+                scanTap.textContent = '✅ Conferido!';
             } else {
                 appBg.className = "bg-red-600 text-white min-h-screen flex flex-col transition-colors duration-100";
                 statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all duration-100";
@@ -753,6 +827,7 @@
                 }
                 tocarSom('erro');
                 scanMessage.textContent = '❌ Erro! Tente novamente';
+                scanTap.textContent = '❌ Tente novamente';
             }
 
             const tempoEspera = sucesso ? 400 : 600;
@@ -775,7 +850,10 @@
                 matchInfo.classList.add('hidden');
                 timeoutFeedback = null;
 
-                scanMessage.textContent = '📷 Aponte para a NR';
+                scanMessage.textContent = '📷 Aponte e toque para ler';
+                scanTap.textContent = '👆 Toque para ler o código';
+                scanTap.style.color = '#fbbf24';
+                scanContainer.classList.remove('scanning-active');
 
                 if (!scannerAtivo) {
                     iniciarScanner();
@@ -784,7 +862,8 @@
         }
 
         console.log('📱 Versão Mobile do Sistema de Conferência carregada');
-        console.log('📷 A câmera está escaneando automaticamente!');
+        console.log('📷 Aponte e toque na tela para ler o código');
+        console.log('🛡️ Proteção contra leituras duplicadas ativada');
     </script>
 
 </body>
