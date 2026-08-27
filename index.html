@@ -21,14 +21,12 @@
 
     <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-700">
         
-        <!-- Logo / Título -->
         <div class="text-center mb-8">
             <div class="text-4xl mb-2">🔐</div>
             <h1 class="text-2xl font-bold text-white">Sistema de Conferência</h1>
             <p class="text-slate-400 text-sm">Faça login para continuar</p>
         </div>
 
-        <!-- Formulário -->
         <form id="form-login" class="space-y-4">
             <div>
                 <label class="block text-sm font-medium text-slate-300 mb-1">👤 Usuário</label>
@@ -52,7 +50,6 @@
             <div id="login-status" class="text-center text-sm hidden"></div>
         </form>
 
-        <!-- Rodapé -->
         <div class="mt-6 pt-4 border-t border-slate-700 text-center">
             <p class="text-xs text-slate-500">Usuários: admin / joao / maria | Senha: 123456</p>
         </div>
@@ -80,7 +77,6 @@
             console.log('✅ Supabase conectado');
         });
 
-        // Fallback: tenta conectar sozinho
         setTimeout(() => {
             if (!supabaseClient && window.supabaseClient) {
                 supabaseClient = window.supabaseClient;
@@ -88,13 +84,11 @@
             }
         }, 2000);
 
-        // Verifica se já está logado
         const usuarioSalvo = localStorage.getItem('usuario_logado');
         if (usuarioSalvo) {
             try {
                 const dados = JSON.parse(usuarioSalvo);
                 if (dados.usuario) {
-                    // Já está logado, redireciona conforme o role
                     if (dados.role === 'admin') {
                         window.location.href = 'admin-layout.html';
                     } else {
@@ -106,7 +100,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO DE LOGIN
+        // FUNÇÃO DE LOGIN (COM TENANT)
         // ==========================================================
 
         form.addEventListener('submit', async (e) => {
@@ -120,13 +114,11 @@
                 return;
             }
 
-            // Desabilita o botão
             btnLogin.disabled = true;
             btnLogin.textContent = '⏳ Verificando...';
             mostrarStatus('', '');
 
             try {
-                // Verifica se o Supabase está disponível
                 if (!supabaseClient) {
                     mostrarStatus('❌ Erro de conexão com o banco de dados', 'text-red-400');
                     btnLogin.disabled = false;
@@ -134,10 +126,10 @@
                     return;
                 }
 
-                // Busca o usuário no Supabase (incluindo role)
+                // 🔍 BUSCA O USUÁRIO INCLUINDO TENANT_ID
                 const { data: usuarios, error } = await supabaseClient
                     .from('usuarios')
-                    .select('id, nome, usuario, role')
+                    .select('id, nome, usuario, role, tenant_id')  // ← INCLUI tenant_id
                     .eq('usuario', usuario)
                     .eq('senha', senha)
                     .eq('ativo', true)
@@ -152,27 +144,27 @@
                 }
 
                 if (usuarios) {
-                    // ✅ LOGIN REALIZADO COM SUCESSO!
                     console.log('✅ Login realizado:', usuarios);
 
-                    // Salva os dados do usuário no localStorage
+                    // 💾 SALVA OS DADOS DO USUÁRIO COM TENANT_ID
                     const dadosUsuario = {
                         id: usuarios.id,
                         nome: usuarios.nome,
                         usuario: usuarios.usuario,
                         role: usuarios.role || 'conferente',
+                        tenant_id: usuarios.tenant_id || null,  // ← NOVO!
                         login_at: new Date().toISOString()
                     };
                     localStorage.setItem('usuario_logado', JSON.stringify(dadosUsuario));
                     localStorage.setItem('conferente', JSON.stringify({ 
                         nome: usuarios.nome, 
                         usuario: usuarios.usuario,
-                        role: usuarios.role || 'conferente'
+                        role: usuarios.role || 'conferente',
+                        tenant_id: usuarios.tenant_id || null
                     }));
 
                     mostrarStatus('✅ Login realizado! Redirecionando...', 'text-green-400');
 
-                    // Redireciona conforme o role
                     setTimeout(() => {
                         if (dadosUsuario.role === 'admin') {
                             window.location.href = 'admin-layout.html';
@@ -182,7 +174,6 @@
                     }, 800);
 
                 } else {
-                    // ❌ USUÁRIO OU SENHA INCORRETOS
                     mostrarStatus('❌ Usuário ou senha incorretos', 'text-red-400');
                     btnLogin.disabled = false;
                     btnLogin.textContent = '🚀 Entrar';
