@@ -11,19 +11,9 @@
         window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
     </script>
     <style>
-        .campo-obrigatorio::after {
-            content: " *";
-            color: #ef4444;
-            font-weight: bold;
-        }
-        .detectado {
-            background-color: rgba(52, 211, 153, 0.15);
-            border-color: rgba(52, 211, 153, 0.3);
-        }
-        .nao-detectado {
-            background-color: rgba(251, 191, 36, 0.08);
-            border-color: rgba(251, 191, 36, 0.2);
-        }
+        .campo-obrigatorio::after { content: " *"; color: #ef4444; font-weight: bold; }
+        .detectado { background-color: rgba(52, 211, 153, 0.15); border-color: rgba(52, 211, 153, 0.3); }
+        .nao-detectado { background-color: rgba(251, 191, 36, 0.08); border-color: rgba(251, 191, 36, 0.2); }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
@@ -34,7 +24,6 @@
             Selecione o arquivo e indique quais colunas correspondem aos dados do sistema.
         </p>
 
-        <!-- Upload do arquivo -->
         <div class="border-2 border-dashed border-slate-600 rounded-xl p-6 text-center hover:border-amber-500 transition-colors">
             <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" class="hidden">
             <label for="fileInput" class="cursor-pointer block">
@@ -44,7 +33,6 @@
             </label>
         </div>
 
-        <!-- Área de Mapeamento -->
         <div id="mapeamento-area" class="hidden mt-6">
             <div class="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3 mb-4">
                 <p class="text-xs text-amber-300">
@@ -81,7 +69,6 @@
                 </div>
             </div>
 
-            <!-- Preview dos dados -->
             <div id="preview-area" class="hidden mt-4">
                 <h4 class="text-sm font-semibold text-slate-300 mb-2">👁️ Preview dos dados</h4>
                 <div class="overflow-x-auto max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-2">
@@ -114,30 +101,33 @@
         let mapeamentoSalvo = {};
 
         // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
+
+        // ==========================================================
         // MAPEAMENTO DE SINÔNIMOS
         // ==========================================================
 
         const sinonimos = {
-            nr: [
-                'nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 
-                'etiqueta', 'codigo_nr', 'n°', 'codigo_de_barras', 
-                'codigo barras', 'chave nf', 'nf-e', 'nfe', 'codigo_de_barras_do_nf-e',
-                'codigo barras nf-e', 'codigo de barras do nf-e'
-            ],
-            nf: [
-                'nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 
-                'nfe', 'documento', 'nota fiscal', 'numero_nota'
-            ],
-            volume_clie: [
-                'volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 
-                'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment', 
-                'nvolume', 'nv', 'codigo_barras', 'nv'
-            ]
+            nr: ['nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 'etiqueta', 'codigo_nr', 'n°', 'codigo_de_barras', 'codigo barras', 'chave nf', 'nf-e', 'nfe', 'codigo_de_barras_do_nf-e', 'codigo barras nf-e', 'codigo de barras do nf-e'],
+            nf: ['nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 'nfe', 'documento', 'nota fiscal', 'numero_nota'],
+            volume_clie: ['volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment', 'nvolume', 'nv', 'codigo_barras', 'nv']
         };
 
         function detectarColuna(nomeColuna) {
             const nomeLower = nomeColuna.toLowerCase().trim();
-            
             for (const [campo, sinList] of Object.entries(sinonimos)) {
                 for (const sin of sinList) {
                     if (nomeLower === sin || nomeLower.includes(sin) || sin.includes(nomeLower)) {
@@ -156,7 +146,6 @@
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             document.getElementById('fileName').textContent = file?.name || 'Nenhum arquivo';
-            
             if (!file) return;
 
             const isExcel = file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
@@ -172,7 +161,6 @@
                         const workbook = XLSX.read(data, { type: 'array' });
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                        
                         dadosBrutos = jsonData;
                         processarArquivo(jsonData);
                     } catch (err) {
@@ -208,7 +196,6 @@
 
             colunasArquivo = Object.keys(data[0]);
             
-            // Detecta mapeamento automático
             const map = { nr: null, nf: null, volume_clie: null };
             const detectados = { nr: false, nf: false, volume_clie: false };
 
@@ -220,7 +207,6 @@
                 }
             }
 
-            // Preenche os selects
             const selectNR = document.getElementById('map-nr');
             const selectNF = document.getElementById('map-nf');
             const selectVOL = document.getElementById('map-volume');
@@ -261,7 +247,6 @@
             document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. ${detectadas} colunas detectadas automaticamente. Confirme o mapeamento abaixo.`;
             document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
 
-            // Salva mapeamento para reuso
             mapeamentoSalvo = { nr: map.nr, nf: map.nf, volume_clie: map.volume_clie };
         }
 
@@ -340,7 +325,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR
+        // FUNÇÃO PARA IMPORTAR (COM TENANT)
         // ==========================================================
 
         document.getElementById('btnImportar').addEventListener('click', async function() {
@@ -365,9 +350,17 @@
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
             try {
+                const tenantId = getTenantId();
+                
+                // Adiciona tenant_id em cada registro
+                const dadosComTenant = dadosParsed.map(row => ({
+                    ...row,
+                    tenant_id: tenantId
+                }));
+
                 const { data: resultado, error } = await window.supabaseClient
                     .from('conferencia')
-                    .insert(dadosParsed);
+                    .insert(dadosComTenant);
 
                 if (error) throw error;
 
