@@ -19,16 +19,13 @@
 <body id="app-bg"
       class="bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-150">
 
-    <!-- Cabeçalho -->
     <header class="p-4 bg-slate-800 shadow-md text-center">
         <h1 class="text-xl font-bold">Conferência de Carga</h1>
         <p class="text-xs text-slate-400">Sistema de Duplo Bip (NR + Volume)</p>
     </header>
 
-    <!-- Área Principal -->
     <main class="flex-1 flex flex-col items-center justify-center p-6 text-center">
 
-        <!-- STATUS BOX -->
         <div id="status-box"
              class="w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-150">
 
@@ -40,7 +37,6 @@
                 Bipe a etiqueta <strong>NR</strong>
             </p>
 
-            <!-- Indicador de processamento -->
             <div id="processing-indicator" class="hidden mb-4 p-2 bg-amber-900/50 border border-amber-500 rounded-lg">
                 <div class="flex items-center justify-center gap-2">
                     <div class="w-3 h-3 bg-amber-400 rounded-full animate-pulse"></div>
@@ -59,7 +55,6 @@
                     <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
                 </div>
 
-                <!-- NOVO: Código limpo (para debug) -->
                 <div id="debug-info" class="hidden mt-2 p-2 bg-slate-700/50 border border-slate-600 rounded-lg">
                     <span class="text-xs text-slate-400 block font-bold">🔍 Código capturado:</span>
                     <span id="display-raw" class="text-xs font-mono text-slate-300 break-all">-</span>
@@ -89,7 +84,6 @@
                autocomplete="off">
     </main>
 
-    <!-- Rodapé -->
     <footer class="p-3 bg-slate-800 text-center text-xs text-slate-400 flex justify-between items-center">
         <span>Status: <span id="connection-status" class="text-yellow-400">Conectando ao Supabase...</span></span>
         <div class="flex items-center gap-4">
@@ -103,7 +97,7 @@
     <script>
 
         // ==========================================================
-        // PROTEÇÃO DE ACESSO - VERIFICA SE O USUÁRIO ESTÁ LOGADO
+        // PROTEÇÃO DE ACESSO
         // ==========================================================
 
         function verificarLogin() {
@@ -137,7 +131,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA OBTER O CONFERENTE LOGADO
+        // FUNÇÕES AUXILIARES
         // ==========================================================
 
         function obterConferente() {
@@ -145,16 +139,11 @@
                 const dados = localStorage.getItem('usuario_logado');
                 if (dados) {
                     const parsed = JSON.parse(dados);
-                    return { nome: parsed.nome, usuario: parsed.usuario, role: parsed.role || 'conferente' };
+                    return { nome: parsed.nome, usuario: parsed.usuario, role: parsed.role || 'conferente', tenant_id: parsed.tenant_id };
                 }
             } catch (e) {}
-            return { nome: 'Desconhecido', usuario: 'unknown', role: 'conferente' };
+            return { nome: 'Desconhecido', usuario: 'unknown', role: 'conferente', tenant_id: null };
         }
-
-
-        // ==========================================================
-        // FUNÇÃO PARA SAIR (LOGOUT)
-        // ==========================================================
 
         function logout() {
             localStorage.removeItem('usuario_logado');
@@ -164,11 +153,14 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA SALVAR LOG DA CONFERÊNCIA
+        // FUNÇÃO PARA SALVAR LOG DA CONFERÊNCIA (COM TENANT)
         // ==========================================================
 
         async function salvarLogConferencia(dados) {
             try {
+                const usuarioLogado = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
+                const tenantId = usuarioLogado.tenant_id || null;
+
                 await supabaseClient
                     .from('conferencia_log')
                     .insert({
@@ -177,6 +169,7 @@
                         conferente: dados.conferente,
                         status: dados.status,
                         mensagem: dados.mensagem || null,
+                        tenant_id: tenantId,  // ← ADICIONADO!
                         created_at: new Date().toISOString()
                     });
             } catch (err) {
@@ -186,48 +179,30 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA LIMPAR CÓDIGO (MAIS ROBUSTA)
+        // FUNÇÃO PARA LIMPAR CÓDIGO
         // ==========================================================
 
         function limparCodigo(codigo) {
             if (!codigo) return '';
-            
-            let limpo = String(codigo);
-            
-            // Remove caracteres especiais e quebras de linha
-            limpo = limpo.replace(/[\r\n\t]/g, '');
-            
-            // Remove espaços extras
-            limpo = limpo.trim();
-            
-            // Remove caracteres não alfanuméricos (mantém apenas números e letras)
+            let limpo = String(codigo).replace(/[\r\n\t]/g, '').trim();
             limpo = limpo.replace(/[^a-zA-Z0-9]/g, '');
-            
             return limpo;
         }
 
 
         // ==========================================================
-        // FUNÇÃO PARA FALAR (VOZ FEMININA) - SOMENTE QUANDO NR NÃO EXISTE
+        // FUNÇÃO PARA FALAR (VOZ FEMININA)
         // ==========================================================
 
         function falar(texto) {
             try {
-                if (!window.speechSynthesis) {
-                    console.warn('⚠️ Speech Synthesis não suportada neste navegador');
-                    return;
-                }
-
-                // Cancela qualquer fala anterior
+                if (!window.speechSynthesis) return;
                 window.speechSynthesis.cancel();
-
                 const utterance = new SpeechSynthesisUtterance(texto);
                 utterance.lang = 'pt-BR';
-                utterance.rate = 0.9;      // Velocidade ideal para entender
-                utterance.pitch = 1.1;     // Tom feminino (agudo)
-                utterance.volume = 1;      // Volume máximo
-
-                // Tenta encontrar uma voz feminina em português
+                utterance.rate = 0.9;
+                utterance.pitch = 1.1;
+                utterance.volume = 1;
                 const vozes = window.speechSynthesis.getVoices();
                 const vozFeminina = vozes.find(v => 
                     v.lang.startsWith('pt') && 
@@ -237,16 +212,9 @@
                      v.name.toLowerCase().includes('daniela') ||
                      v.name.toLowerCase().includes('samantha'))
                 );
-
-                if (vozFeminina) {
-                    utterance.voice = vozFeminina;
-                }
-
+                if (vozFeminina) utterance.voice = vozFeminina;
                 window.speechSynthesis.speak(utterance);
-                console.log(`🗣️ Falando: "${texto}"`);
-            } catch (e) {
-                console.warn('⚠️ Erro ao falar:', e);
-            }
+            } catch (e) {}
         }
 
 
@@ -258,9 +226,9 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
 
 
-        /* ==========================================================
-           VARIÁVEIS GLOBAIS
-           ========================================================== */
+        // ==========================================================
+        // VARIÁVEIS GLOBAIS
+        // ==========================================================
 
         let supabaseClient = null;
         let etapa = 1;
@@ -270,9 +238,9 @@
         let tentativasValidacao = 0;
 
 
-        /* ==========================================================
-           ELEMENTOS DA INTERFACE
-           ========================================================== */
+        // ==========================================================
+        // ELEMENTOS DA INTERFACE
+        // ==========================================================
 
         const inputField = document.getElementById('barcode-input');
         const appBg = document.getElementById('app-bg');
@@ -293,9 +261,9 @@
         const displayRaw = document.getElementById('display-raw');
 
 
-        /* ==========================================================
-           INICIALIZAÇÃO SUPABASE
-           ========================================================== */
+        // ==========================================================
+        // INICIALIZAÇÃO
+        // ==========================================================
 
         window.addEventListener('supabase-ready', () => inicializarSupabase());
 
@@ -319,7 +287,6 @@
                 });
             }
 
-            // Carrega vozes para speech synthesis
             if (window.speechSynthesis) {
                 window.speechSynthesis.getVoices();
                 window.speechSynthesis.onvoiceschanged = () => {
@@ -327,7 +294,6 @@
                 };
             }
 
-            // Ativa debug (pressione D para mostrar/ocultar)
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'd' && e.ctrlKey) {
                     debugInfo.classList.toggle('hidden');
@@ -366,9 +332,9 @@
         }
 
 
-        /* ==========================================================
-           SONS
-           ========================================================== */
+        // ==========================================================
+        // SONS
+        // ==========================================================
 
         function tocarSom(tipo) {
             try {
@@ -377,7 +343,6 @@
                 const gain = audioCtx.createGain();
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-
                 osc.type = 'sawtooth';
 
                 if (tipo === 'sucesso') {
@@ -419,33 +384,28 @@
         }
 
 
-        /* ==========================================================
-           MANTÉM FOCO NO LEITOR
-           ========================================================== */
+        // ==========================================================
+        // MANTÉM FOCO NO LEITOR
+        // ==========================================================
 
         document.addEventListener('click', () => inputField.focus());
 
 
-        /* ==========================================================
-           LEITURA DO CÓDIGO DE BARRAS
-           ========================================================== */
+        // ==========================================================
+        // LEITURA DO CÓDIGO DE BARRAS
+        // ==========================================================
 
         inputField.addEventListener('keydown', async function(e) {
             if (e.key === 'Enter' && !processando) {
                 processando = true;
                 tentativasValidacao = 0;
-                
-                // Mostra indicador de processamento
                 processingIndicator.classList.remove('hidden');
                 
                 try {
                     const codigoBruto = inputField.value;
                     const codigoLido = limparCodigo(codigoBruto);
-                    
-                    // Mostra o código bruto no debug
                     displayRaw.textContent = codigoBruto || '-';
                     debugInfo.classList.remove('hidden');
-                    
                     inputField.value = '';
                     
                     console.log('🔍 Código bruto:', codigoBruto);
@@ -464,15 +424,12 @@
                         errorDetails.classList.add('hidden');
                         clienteInfo.classList.add('hidden');
                         matchInfo.classList.add('hidden');
-                        
                         etapa = 2;
                         instructionTitle.textContent = "Aguardando Volume...";
                         instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
                         tocarSom('neutro');
-                        
                         processando = false;
                         processingIndicator.classList.add('hidden');
-                        
                     } else if (etapa === 2) {
                         const volumeLido = codigoLido;
                         displayVolume.textContent = volumeLido;
@@ -483,7 +440,6 @@
                     processando = false;
                     processingIndicator.classList.add('hidden');
                 } finally {
-                    // Garante que o processamento seja liberado mesmo em caso de erro
                     setTimeout(() => {
                         processando = false;
                         processingIndicator.classList.add('hidden');
@@ -493,9 +449,9 @@
         });
 
 
-        /* ==========================================================
-           VALIDAÇÃO NO SUPABASE - COM RETRY E VALIDAÇÃO DUPLA
-           ========================================================== */
+        // ==========================================================
+        // VALIDAÇÃO NO SUPABASE
+        // ==========================================================
 
         async function validarNoSupabase(nr, volume) {
             if (!supabaseClient) {
@@ -513,7 +469,6 @@
             const conferente = obterConferente();
 
             try {
-                // 1. PRIMEIRA VALIDAÇÃO
                 const { data: registro, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
@@ -523,36 +478,27 @@
 
                 if (error) throw error;
 
-                // 2. SE NÃO ENCONTROU, TENTA NOVAMENTE (para evitar falso negativo)
                 if (!registro) {
                     console.warn('⚠️ Primeira tentativa falhou, tentando novamente...');
                     tentativasValidacao++;
-                    
-                    // Aguarda 300ms e tenta de novo
                     await new Promise(resolve => setTimeout(resolve, 300));
-                    
                     const { data: registro2, error: error2 } = await supabaseClient
                         .from('conferencia')
                         .select('*')
                         .eq('nr', nrLida)
                         .eq('volume_clie', volumeLido)
                         .maybeSingle();
-                    
                     if (error2) throw error2;
-                    
                     if (registro2) {
-                        // Encontrou na segunda tentativa!
                         console.log('✅ Encontrado na segunda tentativa!');
                         await processarSucesso(registro2, nrLida, volumeLido, conferente);
                         return;
                     }
                 }
 
-                // 3. SE ENCONTROU NA PRIMEIRA OU CONTINUA NÃO ENCONTRADO
                 if (registro) {
                     await processarSucesso(registro, nrLida, volumeLido, conferente);
                 } else {
-                    // 4. NÃO ENCONTROU - verifica se a NR existe
                     const { data: nrExiste } = await supabaseClient
                         .from('conferencia')
                         .select('nr')
@@ -562,10 +508,7 @@
                     let mensagemErro = '';
                     if (!nrExiste) {
                         mensagemErro = `NR ${nrLida} não existe na base`;
-                        
-                        // 🔊 VOZ FEMININA - SOMENTE QUANDO NR NÃO EXISTE
                         falar("Atenção, esta NR não está na base de dados.");
-                        
                         setFeedbackVisual(false, "❌ NR INVÁLIDA", mensagemErro);
                     } else {
                         mensagemErro = `Volume ${volumeLido} não pertence à NR ${nrLida}`;
@@ -589,6 +532,7 @@
                 processingIndicator.classList.add('hidden');
             }
         }
+
 
         // ==========================================================
         // FUNÇÃO AUXILIAR PARA PROCESSAR SUCESSO
@@ -618,9 +562,9 @@
         }
 
 
-        /* ==========================================================
-           FEEDBACK VISUAL - MODO TURBO ⚡
-           ========================================================== */
+        // ==========================================================
+        // FEEDBACK VISUAL
+        // ==========================================================
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
             if (timeoutFeedback) {
@@ -662,7 +606,6 @@
                 etapa = 1;
                 nrAtual = '';
                 timeoutFeedback = null;
-                
                 inputField.focus();
             }, tempoEspera);
         }
