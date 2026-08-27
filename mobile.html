@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Conferência Mobile - FreteOnX</title>
+
+    <!-- Biblioteca de leitura de código de barras via câmera -->
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.2/dist/quagga.min.js">
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+        window.createSupabaseClient = createClient;
+        window.dispatchEvent(new Event('supabase-ready'));
+    </script>
+
+    <style>
+        /* Esconde o vídeo da câmera, mas mantém a leitura ativa */
+        #scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #0f172a;
+        }
+
+        #scanner-container video {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1);
+            /* Espelha a imagem para ficar igual ao espelho */
+        }
+
+        #scanner-container canvas {
+            display: none;
+        }
+
+        /* Overlay com a "linha de leitura" */
+        #scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 30%;
+            border: 3px solid rgba(251, 191, 36, 0.6);
+            border-radius: 12px;
+            pointer-events: none;
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.15);
+            animation: pulse-border 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-border {
+            0%,
+            100% {
+                border-color: rgba(251, 191, 36, 0.4);
+                box-shadow: 0 0 20px rgba(251, 191, 36, 0.1);
+            }
+            50% {
+                border-color: rgba(251, 191, 36, 0.9);
+                box-shadow: 0 0 40px rgba(251, 191, 36, 0.3);
+            }
+        }
+
+        /* Mensagem central na câmera */
+        #scan-message {
+            position: absolute;
+            bottom: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 6px 16px;
+            border-radius: 20px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        /* Código lido (flutuante) */
+        #codigo-lido {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: monospace;
+            font-size: 14px;
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            pointer-events: none;
+            display: none;
+            max-width: 90%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Esconde o input padrão */
+        #barcode-input {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+        }
+    </style>
+</head>
+
+<body id="app-bg"
+      class="bg-slate-900 text-white min-h-screen flex flex-col transition-colors duration-150">
+
+    <!-- Cabeçalho -->
+    <header class="p-3 bg-slate-800 shadow-md text-center flex justify-between items-center">
+        <h1 class="text-lg font-bold">📱 Conferência</h1>
+        <div class="flex items-center gap-3">
+            <span id="usuario-logado" class="text-amber-400 text-xs">👤 -</span>
+            <button id="btn-sair" class="text-red-400 hover:text-red-300 text-xs font-semibold transition-colors">
+                Sair
+            </button>
+        </div>
+    </header>
+
+    <!-- Área Principal -->
+    <main class="flex-1 flex flex-col items-center justify-center p-3 gap-3 overflow-hidden">
+
+        <!-- Scanner (Câmera) -->
+        <div id="scanner-container" class="relative">
+            <div id="scanner"></div>
+            <div id="scan-overlay"></div>
+            <div id="codigo-lido"></div>
+            <div id="scan-message">📷 Aponte para o código de barras</div>
+        </div>
+
+        <!-- Status Box (feedback visual) -->
+        <div id="status-box"
+             class="w-full max-w-md p-4 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-150">
+
+            <h2 id="instruction-title" class="text-base font-semibold text-slate-300 mb-1 text-center">
+                Aguardando Leitura...
+            </h2>
+
+            <p id="instruction-sub" class="text-xs text-slate-400 mb-3 text-center">
+                Bipe a etiqueta <strong>NR</strong>
+            </p>
+
+            <div class="space-y-2 text-left">
+                <div>
+                    <label class="text-xs text-slate-400 block">NR Lida:</label>
+                    <span id="display-nr" class="text-lg font-mono font-bold text-amber-400">-</span>
+                </div>
+
+                <div>
+                    <label class="text-xs text-slate-400 block">Volume Lido:</label>
+                    <span id="display-volume" class="text-lg font-mono font-bold text-amber-400">-</span>
+                </div>
+
+                <div id="cliente-info" class="hidden mt-2 p-2 bg-blue-900/50 border border-blue-500 rounded-lg">
+                    <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE:</span>
+                    <span id="display-cliente" class="text-sm font-mono text-white">-</span>
+                </div>
+
+                <div id="match-info" class="hidden mt-2 p-2 bg-green-900/50 border border-green-500 rounded-lg">
+                    <span class="text-xs text-green-300 block font-bold">✅ VOLUME CLIE ENCONTRADO:</span>
+                    <span id="display-match" class="text-sm font-mono text-white">-</span>
+                </div>
+
+                <div id="error-details" class="hidden mt-3 p-3 bg-red-900/50 border border-red-500 rounded-lg">
+                    <span class="text-xs text-red-300 block font-bold">⚠️ ATENÇÃO:</span>
+                    <span id="display-info-extra" class="text-sm font-mono text-white">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botão para reativar a câmera (caso pare) -->
+        <button id="btn-reiniciar-camera" class="text-xs text-slate-400 hover:text-slate-300 transition-colors">
+            🔄 Reativar Câmera
+        </button>
+
+        <input type="text" id="barcode-input" autofocus>
+
+    </main>
+
+    <script>
+
+        // ==========================================================
+        // PROTEÇÃO DE ACESSO - VERIFICA SE O USUÁRIO ESTÁ LOGADO
+        // ==========================================================
+
+        function verificarLogin() {
+            const usuarioSalvo = localStorage.getItem('usuario_logado');
+            if (!usuarioSalvo) {
+                window.location.href = 'index.html';
+                return null;
+            }
+            try {
+                const dados = JSON.parse(usuarioSalvo);
+                if (!dados.usuario) {
+                    window.location.href = 'index.html';
+                    return null;
+                }
+                if (dados.role === 'admin') {
+                    const isInAdmin = window.location.pathname.includes('admin-layout.html') ||
+                        (window.parent && window.parent.location.pathname.includes('admin-layout.html'));
+                    if (!isInAdmin) {
+                        window.location.href = 'admin-layout.html';
+                        return null;
+                    }
+                }
+                return dados;
+            } catch (e) {
+                window.location.href = 'index.html';
+                return null;
+            }
+        }
+
+        const usuarioLogado = verificarLogin();
+
+
+        // ==========================================================
+        // FUNÇÃO PARA OBTER O CONFERENTE LOGADO
+        // ==========================================================
+
+        function obterConferente() {
+            try {
+                const dados = localStorage.getItem('usuario_logado');
+                if (dados) {
+                    const parsed = JSON.parse(dados);
+                    return { nome: parsed.nome, usuario: parsed.usuario, role: parsed.role || 'conferente' };
+                }
+            } catch (e) {}
+            return { nome: 'Desconhecido', usuario: 'unknown', role: 'conferente' };
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA SAIR (LOGOUT)
+        // ==========================================================
+
+        function logout() {
+            localStorage.removeItem('usuario_logado');
+            localStorage.removeItem('conferente');
+            window.location.href = 'index.html';
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA LIMPAR CÓDIGO
+        // ==========================================================
+
+        function limparCodigo(codigo) {
+            if (!codigo) return '';
+            let limpo = String(codigo).replace(/[\r\n\t]/g, '').trim();
+            limpo = limpo.replace(/[^a-zA-Z0-9]/g, '');
+            return limpo;
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA FALAR (VOZ FEMININA)
+        // ==========================================================
+
+        function falar(texto) {
+            try {
+                if (!window.speechSynthesis) return;
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = 'pt-BR';
+                utterance.rate = 0.9;
+                utterance.pitch = 1.1;
+                utterance.volume = 1;
+                const vozes = window.speechSynthesis.getVoices();
+                const vozFeminina = vozes.find(v =>
+                    v.lang.startsWith('pt') &&
+                    (v.name.toLowerCase().includes('female') ||
+                        v.name.toLowerCase().includes('zira') ||
+                        v.name.toLowerCase().includes('maria') ||
+                        v.name.toLowerCase().includes('daniela') ||
+                        v.name.toLowerCase().includes('samantha'))
+                );
+                if (vozFeminina) utterance.voice = vozFeminina;
+                window.speechSynthesis.speak(utterance);
+            } catch (e) {}
+        }
+
+
+        // ==========================================================
+        // CONFIGURAÇÃO SUPABASE
+        // ==========================================================
+
+        const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
+
+
+        // ==========================================================
+        // VARIÁVEIS GLOBAIS
+        // ==========================================================
+
+        let supabaseClient = null;
+        let etapa = 1;
+        let nrAtual = '';
+        let processando = false;
+        let timeoutFeedback = null;
+        let tentativasValidacao = 0;
+        let scannerAtivo = false;
+
+
+        // ==========================================================
+        // ELEMENTOS DA INTERFACE
+        // ==========================================================
+
+        const appBg = document.getElementById('app-bg');
+        const statusBox = document.getElementById('status-box');
+        const instructionTitle = document.getElementById('instruction-title');
+        const instructionSub = document.getElementById('instruction-sub');
+        const displayNr = document.getElementById('display-nr');
+        const displayVolume = document.getElementById('display-volume');
+        const connectionStatus = document.getElementById('connection-status');
+        const errorDetails = document.getElementById('error-details');
+        const displayInfoExtra = document.getElementById('display-info-extra');
+        const clienteInfo = document.getElementById('cliente-info');
+        const displayCliente = document.getElementById('display-cliente');
+        const matchInfo = document.getElementById('match-info');
+        const displayMatch = document.getElementById('display-match');
+        const codigoLidoEl = document.getElementById('codigo-lido');
+        const scanMessage = document.getElementById('scan-message');
+
+
+        // ==========================================================
+        // INICIALIZAÇÃO SUPABASE
+        // ==========================================================
+
+        window.addEventListener('supabase-ready', () => inicializarSupabase());
+
+        window.addEventListener('load', () => {
+            if (window.createSupabaseClient && !supabaseClient) inicializarSupabase();
+
+            const conferente = obterConferente();
+            const usuarioElement = document.getElementById('usuario-logado');
+            if (usuarioElement) {
+                usuarioElement.textContent = `👤 ${conferente.nome}`;
+            }
+
+            const btnSair = document.getElementById('btn-sair');
+            if (btnSair) {
+                btnSair.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (confirm('Deseja realmente encerrar a sessão?')) {
+                        logout();
+                    }
+                });
+            }
+
+            // Carrega vozes
+            if (window.speechSynthesis) {
+                window.speechSynthesis.getVoices();
+                window.speechSynthesis.onvoiceschanged = () => {
+                    console.log('🗣️ Vozes carregadas:', window.speechSynthesis.getVoices().length);
+                };
+            }
+
+            // Inicia a câmera
+            iniciarScanner();
+
+            // Botão reiniciar câmera
+            document.getElementById('btn-reiniciar-camera').addEventListener('click', () => {
+                iniciarScanner();
+            });
+        });
+
+        function inicializarSupabase() {
+            try {
+                if (!supabaseClient && window.createSupabaseClient) {
+                    supabaseClient = window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    testarConexao();
+                }
+            } catch (err) {
+                console.error("Erro ao iniciar cliente:", err);
+                connectionStatus.textContent = "Erro ao iniciar Supabase";
+                connectionStatus.className = "text-red-400";
+            }
+        }
+
+        async function testarConexao() {
+            if (!supabaseClient) return;
+            try {
+                const { error } = await supabaseClient.from('conferencia').select('id').limit(1);
+                if (error) {
+                    connectionStatus.textContent = "Conectado (Verifique permissões RLS)";
+                    connectionStatus.className = "text-orange-400";
+                } else {
+                    connectionStatus.textContent = "Conectado ao Supabase";
+                    connectionStatus.className = "text-green-400";
+                }
+            } catch (e) {
+                connectionStatus.textContent = "Erro de conexão de rede";
+                connectionStatus.className = "text-red-400";
+            }
+        }
+
+
+        // ==========================================================
+        // INICIAR SCANNER (CÂMERA)
+        // ==========================================================
+
+        function iniciarScanner() {
+            if (scannerAtivo) {
+                Quagga.stop();
+                scannerAtivo = false;
+            }
+
+            const container = document.getElementById('scanner');
+
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: container,
+                    constraints: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "environment"
+                    },
+                    area: {
+                        top: "20%",
+                        right: "10%",
+                        left: "10%",
+                        bottom: "20%"
+                    }
+                },
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "code_39_vin_reader",
+                        "codabar_reader",
+                        "upc_reader",
+                        "upc_e_reader",
+                        "i2of5_reader",
+                        "code_93_reader"
+                    ],
+                    multiple: false
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error('❌ Erro ao iniciar scanner:', err);
+                    scanMessage.textContent = '❌ Erro ao acessar a câmera. Verifique as permissões.';
+                    return;
+                }
+                scannerAtivo = true;
+                console.log('✅ Scanner iniciado');
+                scanMessage.textContent = '📷 Aponte para o código de barras';
+                Quagga.start();
+            });
+
+            // Quando um código é detectado
+            Quagga.onDetected(function(result) {
+                const code = result.codeResult.code;
+                console.log('📸 Código detectado:', code);
+                processarCodigoLido(code);
+            });
+
+            // Atualiza o status da câmera
+            Quagga.onProcessed(function(result) {
+                const drawingCtx = Quagga.canvas.ctx.overlay;
+                const drawingCanvas = Quagga.canvas.dom.overlay;
+
+                if (result) {
+                    if (result.boxes) {
+                        drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute('width')), parseInt(drawingCanvas.getAttribute('height')));
+                        result.boxes.filter(function(box) {
+                            return box !== result.box;
+                        }).forEach(function(box) {
+                            Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(251, 191, 36, 0.2)", lineWidth: 1 });
+                        });
+                    }
+                    if (result.box) {
+                        Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(251, 191, 36, 0.8)", lineWidth: 2 });
+                    }
+                }
+            });
+        }
+
+
+        // ==========================================================
+        // PROCESSAR CÓDIGO LIDO (AUTOMATICAMENTE)
+        // ==========================================================
+
+        function processarCodigoLido(codigo) {
+            if (processando) return;
+
+            const codigoLido = limparCodigo(codigo);
+            if (!codigoLido) return;
+
+            // Mostra o código na tela
+            codigoLidoEl.textContent = codigoLido;
+            codigoLidoEl.style.display = 'block';
+
+            // Vibra o celular (se disponível)
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
+
+            console.log('📱 Código processado:', codigoLido);
+
+            // Aguarda um pequeno delay para evitar leituras duplicadas
+            processando = true;
+
+            if (etapa === 1) {
+                // ETAPA 1: LEITURA DA NR
+                nrAtual = codigoLido;
+                displayNr.textContent = nrAtual;
+                displayVolume.textContent = '-';
+                errorDetails.classList.add('hidden');
+                clienteInfo.classList.add('hidden');
+                matchInfo.classList.add('hidden');
+
+                etapa = 2;
+                instructionTitle.textContent = "Aguardando Volume...";
+                instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
+                tocarSom('neutro');
+                scanMessage.textContent = '📷 Aponte para o VOLUME';
+
+                setTimeout(() => {
+                    processando = false;
+                }, 300);
+
+            } else if (etapa === 2) {
+                // ETAPA 2: LEITURA DO VOLUME
+                const volumeLido = codigoLido;
+                displayVolume.textContent = volumeLido;
+                scanMessage.textContent = '⏳ Validando...';
+
+                validarNoSupabase(nrAtual, volumeLido).finally(() => {
+                    setTimeout(() => {
+                        processando = false;
+                    }, 300);
+                });
+            } else {
+                processando = false;
+            }
+        }
+
+
+        // ==========================================================
+        // SONS
+        // ==========================================================
+
+        function tocarSom(tipo) {
+            try {
+                const audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+
+                if (tipo === 'sucesso') {
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + 0.1);
+
+                    setTimeout(() => {
+                        const osc2 = audioCtx.createOscillator();
+                        const gain2 = audioCtx.createGain();
+                        osc2.connect(gain2);
+                        gain2.connect(audioCtx.destination);
+                        osc2.frequency.setValueAtTime(1100, audioCtx.currentTime);
+                        gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                        gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                        osc2.start(audioCtx.currentTime);
+                        osc2.stop(audioCtx.currentTime + 0.08);
+                    }, 80);
+
+                } else if (tipo === 'erro') {
+                    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + 0.15);
+
+                } else {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(660, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.06);
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + 0.06);
+                }
+
+            } catch (e) {}
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA SALVAR LOG DA CONFERÊNCIA
+        // ==========================================================
+
+        async function salvarLogConferencia(dados) {
+            try {
+                await supabaseClient
+                    .from('conferencia_log')
+                    .insert({
+                        nr: dados.nr,
+                        volume_clie: dados.volume_clie,
+                        conferente: dados.conferente,
+                        status: dados.status,
+                        mensagem: dados.mensagem || null,
+                        created_at: new Date().toISOString()
+                    });
+            } catch (err) {
+                console.error('❌ Erro ao salvar log:', err);
+            }
+        }
+
+
+        // ==========================================================
+        // VALIDAÇÃO NO SUPABASE
+        // ==========================================================
+
+        async function validarNoSupabase(nr, volume) {
+            if (!supabaseClient) {
+                inicializarSupabase();
+                if (!supabaseClient) {
+                    setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
+                    return;
+                }
+            }
+
+            const nrLida = String(nr).trim();
+            const volumeLido = String(volume).trim();
+            const conferente = obterConferente();
+
+            try {
+                const { data: registro, error } = await supabaseClient
+                    .from('conferencia')
+                    .select('*')
+                    .eq('nr', nrLida)
+                    .eq('volume_clie', volumeLido)
+                    .maybeSingle();
+
+                if (error) throw error;
+
+                if (!registro) {
+                    console.warn('⚠️ Primeira tentativa falhou, tentando novamente...');
+                    tentativasValidacao++;
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    const { data: registro2, error: error2 } = await supabaseClient
+                        .from('conferencia')
+                        .select('*')
+                        .eq('nr', nrLida)
+                        .eq('volume_clie', volumeLido)
+                        .maybeSingle();
+                    if (error2) throw error2;
+                    if (registro2) {
+                        console.log('✅ Encontrado na segunda tentativa!');
+                        await processarSucesso(registro2, nrLida, volumeLido, conferente);
+                        return;
+                    }
+                }
+
+                if (registro) {
+                    await processarSucesso(registro, nrLida, volumeLido, conferente);
+                } else {
+                    const { data: nrExiste } = await supabaseClient
+                        .from('conferencia')
+                        .select('nr')
+                        .eq('nr', nrLida)
+                        .maybeSingle();
+
+                    let mensagemErro = '';
+                    if (!nrExiste) {
+                        mensagemErro = `NR ${nrLida} não existe na base`;
+                        falar("Atenção, esta NR não está na base de dados.");
+                        setFeedbackVisual(false, "❌ NR INVÁLIDA", mensagemErro);
+                    } else {
+                        mensagemErro = `Volume ${volumeLido} não pertence à NR ${nrLida}`;
+                        setFeedbackVisual(false, "❌ VOLUME INVÁLIDO", mensagemErro);
+                    }
+
+                    await salvarLogConferencia({
+                        nr: nrLida,
+                        volume_clie: volumeLido,
+                        conferente: conferente.nome || 'Desconhecido',
+                        status: 'erro',
+                        mensagem: mensagemErro
+                    });
+                }
+
+            } catch (err) {
+                console.error("❌ Erro detalhado no Supabase:", err);
+                setFeedbackVisual(false, "❌ ERRO", err.message || "Falha ao buscar dados.");
+            }
+        }
+
+        // ==========================================================
+        // FUNÇÃO AUXILIAR PARA PROCESSAR SUCESSO
+        // ==========================================================
+
+        async function processarSucesso(registro, nrLida, volumeLido, conferente) {
+            await salvarLogConferencia({
+                nr: nrLida,
+                volume_clie: volumeLido,
+                conferente: conferente.nome || 'Desconhecido',
+                status: 'sucesso',
+                mensagem: null
+            });
+
+            if (registro.cliente || registro.remetente) {
+                clienteInfo.classList.remove('hidden');
+                displayCliente.textContent = registro.cliente || registro.remetente || 'N/A';
+            } else {
+                clienteInfo.classList.add('hidden');
+            }
+
+            matchInfo.classList.remove('hidden');
+            displayMatch.textContent = volumeLido + ' ✅';
+
+            const msgExtra = tentativasValidacao > 0 ? ` (${tentativasValidacao}ª tentativa)` : '';
+            setFeedbackVisual(true, `✅ CONFERIDO${msgExtra}`, null);
+        }
+
+
+        // ==========================================================
+        // FEEDBACK VISUAL
+        // ==========================================================
+
+        function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
+            if (timeoutFeedback) {
+                clearTimeout(timeoutFeedback);
+                timeoutFeedback = null;
+            }
+
+            instructionTitle.textContent = mensagem;
+            codigoLidoEl.style.display = 'none';
+
+            if (sucesso) {
+                appBg.className = "bg-green-600 text-white min-h-screen flex flex-col transition-colors duration-100";
+                statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all duration-100";
+                errorDetails.classList.add('hidden');
+                tocarSom('sucesso');
+                scanMessage.textContent = '✅ Conferido!';
+            } else {
+                appBg.className = "bg-red-600 text-white min-h-screen flex flex-col transition-colors duration-100";
+                statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all duration-100";
+                if (detalheExtra) {
+                    displayInfoExtra.textContent = detalheExtra;
+                    errorDetails.classList.remove('hidden');
+                } else {
+                    errorDetails.classList.add('hidden');
+                }
+                tocarSom('erro');
+                scanMessage.textContent = '❌ Erro! Tente novamente';
+            }
+
+            const tempoEspera = sucesso ? 400 : 600;
+
+            timeoutFeedback = setTimeout(() => {
+                appBg.className = "bg-slate-900 text-white min-h-screen flex flex-col transition-colors duration-100";
+                statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-100";
+                instructionTitle.textContent = etapa === 1 ? "Aguardando NR..." : "Aguardando Volume...";
+                instructionSub.innerHTML = etapa === 1 ?
+                    "Bipe a etiqueta <strong>NR</strong>" :
+                    "Bipe a etiqueta de <strong>Volume</strong>";
+                errorDetails.classList.add('hidden');
+                clienteInfo.classList.add('hidden');
+                matchInfo.classList.add('hidden');
+                timeoutFeedback = null;
+
+                if (etapa === 1) {
+                    scanMessage.textContent = '📷 Aponte para a NR';
+                } else {
+                    scanMessage.textContent = '📷 Aponte para o VOLUME';
+                }
+
+                // Reativa o scanner se estiver pausado
+                if (!scannerAtivo) {
+                    iniciarScanner();
+                }
+            }, tempoEspera);
+        }
+
+        // ==========================================================
+        // RESETA O CÓDIGO LIDO QUANDO O USUÁRIO TOCA NA TELA
+        // ==========================================================
+
+        document.addEventListener('click', () => {
+            // Permite que o usuário "limpe" o código lido clicando na tela
+            // Útil se a câmera leu algo errado
+        });
+
+        console.log('📱 Versão Mobile do Sistema de Conferência carregada');
+        console.log('📷 A câmera está escaneando automaticamente!');
+    </script>
+
+</body>
+</html>
