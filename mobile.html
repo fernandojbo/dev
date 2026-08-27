@@ -32,7 +32,7 @@
             width: 100%;
             height: auto;
             display: block;
-            transform: scaleX(-1);
+            /* REMOVIDO: transform: scaleX(-1); */
         }
 
         #scanner-container canvas {
@@ -147,7 +147,6 @@
             height: 1px;
         }
 
-        /* Loading da câmera */
         #camera-loading {
             position: absolute;
             top: 50%;
@@ -198,7 +197,7 @@
     <!-- Área Principal -->
     <main class="flex-1 flex flex-col items-center justify-center p-3 gap-3 overflow-hidden">
 
-        <!-- Scanner (Câmera) - TOQUE PARA LER -->
+        <!-- Scanner (Câmera) -->
         <div id="scanner-container" class="relative">
             <div id="scanner"></div>
             <div id="camera-loading">
@@ -211,7 +210,7 @@
             <div id="scan-message">📷 Aponte para o código</div>
         </div>
 
-        <!-- Status Box (feedback visual) -->
+        <!-- Status Box -->
         <div id="status-box"
              class="w-full max-w-md p-4 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-150">
 
@@ -251,7 +250,6 @@
             </div>
         </div>
 
-        <!-- Botão para reativar a câmera -->
         <button id="btn-reiniciar-camera" class="text-xs text-slate-400 hover:text-slate-300 transition-colors">
             🔄 Reativar Câmera
         </button>
@@ -441,7 +439,7 @@
             });
 
             // ==========================================================
-            // EVENTO DE TOQUE NA TELA - ATIVA A LEITURA
+            // EVENTO DE TOQUE - ATIVA A LEITURA
             // ==========================================================
 
             scanContainer.addEventListener('click', function() {
@@ -456,7 +454,6 @@
                     return;
                 }
 
-                // ATIVA A LEITURA POR 1 SEGUNDO
                 leituraAtiva = true;
                 scanOverlay.classList.add('active');
                 scanTap.textContent = '📸 Lendo...';
@@ -465,7 +462,6 @@
 
                 console.log('👆 Leitura ativada!');
 
-                // Desativa a leitura após 1.5 segundos
                 setTimeout(() => {
                     leituraAtiva = false;
                     scanOverlay.classList.remove('active');
@@ -574,11 +570,10 @@
             });
 
             // ==========================================================
-            // DETECÇÃO DE CÓDIGO - SÓ FUNCIONA SE A LEITURA ESTIVER ATIVA
+            // DETECÇÃO DE CÓDIGO - SÓ COM LEITURA ATIVA
             // ==========================================================
 
             Quagga.onDetected(function(result) {
-                // ✅ SÓ PROCESSA SE A LEITURA ESTIVER ATIVA
                 if (!leituraAtiva) {
                     console.log('⏸️ Leitura inativa, código ignorado');
                     return;
@@ -587,7 +582,6 @@
                 const code = result.codeResult.code;
                 console.log('📸 Código detectado:', code);
 
-                // Desativa a leitura imediatamente para evitar duplicidade
                 leituraAtiva = false;
                 scanOverlay.classList.remove('active');
                 scanTap.textContent = '👆 Toque para ler';
@@ -610,7 +604,6 @@
                         });
                     }
                     if (result.box) {
-                        // Só desenha a caixa se a leitura estiver ativa
                         if (leituraAtiva) {
                             Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(52, 211, 153, 0.9)", lineWidth: 2 });
                         } else {
@@ -862,7 +855,7 @@
 
 
         // ==========================================================
-        // FEEDBACK VISUAL (COM LIMPEZA DOS CAMPOS)
+        // FEEDBACK VISUAL
         // ==========================================================
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
@@ -904,13 +897,11 @@
             const tempoEspera = sucesso ? 400 : 600;
 
             timeoutFeedback = setTimeout(() => {
-                // ✅ LIMPA OS CAMPOS DA TELA
                 limparCampos();
 
                 appBg.className = "bg-slate-900 text-white min-h-screen flex flex-col transition-colors duration-100";
                 statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-100";
 
-                // ✅ RESETA A ETAPA PARA 1 (AGUARDANDO NR)
                 etapa = 1;
                 nrAtual = '';
 
@@ -936,6 +927,7 @@
         console.log('📱 Versão Mobile do Sistema de Conferência carregada');
         console.log('📷 Aponte e TOQUE na tela para ler o código');
         console.log('🛡️ Leitura desativada por padrão, ativada apenas no toque');
+        console.log('🔄 Espelhamento da câmera desativado para leitura correta');
     </script>
 
 </body>
