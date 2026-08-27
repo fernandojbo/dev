@@ -24,6 +24,18 @@
             background-color: rgba(251, 191, 36, 0.08);
             border-color: rgba(251, 191, 36, 0.2);
         }
+        .erro-item {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 3px solid #ef4444;
+        }
+        .sucesso-item {
+            background-color: rgba(34, 197, 94, 0.1);
+            border-left: 3px solid #22c55e;
+        }
+        .atualizado-item {
+            background-color: rgba(251, 191, 36, 0.1);
+            border-left: 3px solid #fbbf24;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
@@ -101,6 +113,9 @@
         </div>
 
         <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
+        
+        <!-- Área de detalhes da importação -->
+        <div id="detalhes-importacao" class="hidden mt-4 max-h-60 overflow-y-auto space-y-1"></div>
     </div>
 
     <script>
@@ -208,7 +223,6 @@
 
             colunasArquivo = Object.keys(data[0]);
             
-            // Detecta mapeamento automático
             const map = { nr: null, nf: null, volume_clie: null };
             const detectados = { nr: false, nf: false, volume_clie: false };
 
@@ -220,7 +234,6 @@
                 }
             }
 
-            // Preenche os selects
             const selectNR = document.getElementById('map-nr');
             const selectNF = document.getElementById('map-nf');
             const selectVOL = document.getElementById('map-volume');
@@ -261,7 +274,6 @@
             document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. ${detectadas} colunas detectadas automaticamente. Confirme o mapeamento abaixo.`;
             document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
 
-            // Salva mapeamento para reuso
             mapeamentoSalvo = { nr: map.nr, nf: map.nf, volume_clie: map.volume_clie };
         }
 
@@ -340,7 +352,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR (COM UPSERT)
+        // FUNÇÃO PARA IMPORTAR (COM PROCESSAMENTO EM LOTE E RELATÓRIO)
         // ==========================================================
 
         document.getElementById('btnImportar').addEventListener('click', async function() {
@@ -359,60 +371,123 @@
 
             const btn = document.getElementById('btnImportar');
             const status = document.getElementById('status');
+            const detalhesDiv = document.getElementById('detalhes-importacao');
             
             btn.disabled = true;
-            status.textContent = "⏳ Importando...";
+            status.textContent = "⏳ Importando registros um a um...";
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
+            detalhesDiv.innerHTML = '';
+            detalhesDiv.classList.remove('hidden');
 
-            try {
-                // 🔥 UPSERT: insere ou atualiza baseado na coluna 'nr'
-                const { data: resultado, error } = await window.supabaseClient
-                    .from('conferencia')
-                    .upsert(dadosParsed, { 
-                        onConflict: 'nr',   // Coluna usada para verificar duplicata
-                        ignoreDuplicates: false  // Atualiza se existir
-                    });
+            let inseridos = 0;
+            let atualizados = 0;
+            let erros = [];
+            let processados = 0;
 
-                if (error) {
-                    console.error('❌ Erro do Supabase:', error);
+            for (const registro of dadosParsed) {
+                try {
+                    processados++;
                     
-                    // Mensagem mais amigável para erro de chave duplicada
-                    if (error.message && error.message.includes('duplicate key')) {
-                        if (error.message.includes('volume_clie')) {
-                            throw new Error('❌ VOLUME_CLIE já existe na base. Não é permitido duplicar volumes.');
-                        } else if (error.message.includes('nr')) {
-                            throw new Error('❌ NR já existe na base. Não é permitido duplicar NRs.');
+                    // Tenta inserir ou atualizar
+                    const { data, error } = await window.supabaseClient
+                        .from('conferencia')
+                        .upsert(registro, { 
+                            onConflict: 'nr',
+                            ignoreDuplicates: false
+                        });
+
+                    if (error) {
+                        // Verifica se é erro de duplicata de volume
+                        if (error.message && error.message.includes('volume_clie')) {
+                            erros.push({
+                                nr: registro.nr || 'N/A',
+                                volume: registro.volume_clie || 'N/A',
+                                motivo: 'VOLUME_CLIE já existe na base'
+                            });
+                        } else if (error.message && error.message.includes('nr')) {
+                            erros.push({
+                                nr: registro.nr || 'N/A',
+                                volume: registro.volume_clie || 'N/A',
+                                motivo: 'NR já existe na base'
+                            });
                         } else {
-                            throw new Error('❌ Registro duplicado encontrado. Verifique os dados.');
+                            erros.push({
+                                nr: registro.nr || 'N/A',
+                                volume: registro.volume_clie || 'N/A',
+                                motivo: error.message || 'Erro desconhecido'
+                            });
                         }
+                        continue;
                     }
-                    throw error;
+
+                    // Verifica se foi inserido ou atualizado
+                    if (data && data.length > 0) {
+                        if (data[0].created_at === data[0].updated_at) {
+                            inseridos++;
+                        } else {
+                            atualizados++;
+                        }
+                    } else {
+                        // Fallback: se não retornou dados, consideramos como sucesso
+                        inseridos++;
+                    }
+
+                } catch (err) {
+                    erros.push({
+                        nr: registro.nr || 'N/A',
+                        volume: registro.volume_clie || 'N/A',
+                        motivo: err.message || 'Erro inesperado'
+                    });
                 }
-
-                // Conta quantos foram inseridos vs atualizados
-                const inserted = resultado?.filter(r => r.created_at === r.updated_at)?.length || 0;
-                const updated = (resultado?.length || 0) - inserted;
-
-                console.log('✅ Importado com sucesso:', resultado);
-                
-                let msg = `✅ Importação concluída! ${dadosParsed.length} registros processados.`;
-                if (inserted > 0) msg += `\n📥 ${inserted} novos inseridos.`;
-                if (updated > 0) msg += `\n🔄 ${updated} atualizados.`;
-                
-                status.textContent = msg;
-                status.className = "mt-4 text-center text-green-400 font-semibold";
-            } catch (err) {
-                console.error('❌ Erro ao importar:', err);
-                status.textContent = "❌ " + err.message;
-                status.className = "mt-4 text-center text-red-400 font-semibold";
-            } finally {
-                btn.disabled = false;
             }
+
+            // ==========================================================
+            // RELATÓRIO FINAL
+            // ==========================================================
+
+            // Status principal
+            let msg = `✅ Importação concluída! ${processados} registros processados.`;
+            if (inseridos > 0) msg += `\n📥 ${inseridos} novos inseridos.`;
+            if (atualizados > 0) msg += `\n🔄 ${atualizados} atualizados.`;
+            if (erros.length > 0) msg += `\n❌ ${erros.length} falhas.`;
+            
+            status.textContent = msg;
+            status.className = "mt-4 text-center text-sm font-semibold " + 
+                (erros.length > 0 ? "text-yellow-400" : "text-green-400");
+
+            // ==========================================================
+            // DETALHES DOS ERROS
+            // ==========================================================
+
+            if (erros.length > 0) {
+                detalhesDiv.innerHTML = `
+                    <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-2">
+                        <p class="text-red-400 font-semibold text-sm">❌ ${erros.length} registros NÃO foram importados:</p>
+                    </div>
+                    ${erros.map(e => `
+                        <div class="erro-item px-3 py-2 rounded-lg text-xs flex justify-between items-center">
+                            <div>
+                                <span class="font-mono text-slate-300">NR: ${e.nr}</span>
+                                <span class="font-mono text-slate-400 ml-3">VOL: ${e.volume}</span>
+                            </div>
+                            <span class="text-red-400 font-semibold">${e.motivo}</span>
+                        </div>
+                    `).join('')}
+                `;
+            } else {
+                detalhesDiv.innerHTML = `
+                    <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
+                        <p class="text-green-400 font-semibold text-sm">✅ Todos os ${processados} registros foram importados com sucesso!</p>
+                    </div>
+                `;
+            }
+
+            btn.disabled = false;
         });
 
         console.log('📥 Importador com mapeamento inteligente carregado');
         console.log('🔀 Sinônimos reconhecidos:', sinonimos);
-        console.log('🔄 Importação com UPSERT ativada (NR como chave)');
+        console.log('🔄 Importação com processamento individual e relatório detalhado');
     </script>
 
 </body>
