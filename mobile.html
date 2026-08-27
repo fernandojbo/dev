@@ -172,7 +172,7 @@
             </div>
         </div>
 
-        <!-- Botão para reativar a câmera (caso pare) -->
+        <!-- Botão para reativar a câmera -->
         <button id="btn-reiniciar-camera" class="text-xs text-slate-400 hover:text-slate-300 transition-colors">
             🔄 Reativar Câmera
         </button>
@@ -185,7 +185,6 @@
 
         // ==========================================================
         // PROTEÇÃO DE ACESSO - APENAS VERIFICA SE ESTÁ LOGADO
-        // SEM REDIRECIONAMENTO PARA ADMIN - VERSÃO MOBILE
         // ==========================================================
 
         function verificarLogin() {
@@ -200,8 +199,6 @@
                     window.location.href = 'index.html';
                     return null;
                 }
-                // ✅ QUALQUER USUÁRIO PODE USAR O MOBILE
-                // NÃO REDIRECIONA MAIS PARA ADMIN
                 return dados;
             } catch (e) {
                 window.location.href = 'index.html';
@@ -248,6 +245,21 @@
             let limpo = String(codigo).replace(/[\r\n\t]/g, '').trim();
             limpo = limpo.replace(/[^a-zA-Z0-9]/g, '');
             return limpo;
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA LIMPAR OS CAMPOS DA TELA
+        // ==========================================================
+
+        function limparCampos() {
+            document.getElementById('display-nr').textContent = '-';
+            document.getElementById('display-volume').textContent = '-';
+            document.getElementById('codigo-lido').style.display = 'none';
+            document.getElementById('codigo-lido').textContent = '';
+            document.getElementById('cliente-info').classList.add('hidden');
+            document.getElementById('match-info').classList.add('hidden');
+            document.getElementById('error-details').classList.add('hidden');
         }
 
 
@@ -712,7 +724,7 @@
 
 
         // ==========================================================
-        // FEEDBACK VISUAL
+        // FEEDBACK VISUAL (COM LIMPEZA DOS CAMPOS)
         // ==========================================================
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
@@ -746,22 +758,24 @@
             const tempoEspera = sucesso ? 400 : 600;
 
             timeoutFeedback = setTimeout(() => {
+                // ✅ LIMPA OS CAMPOS DA TELA
+                limparCampos();
+
                 appBg.className = "bg-slate-900 text-white min-h-screen flex flex-col transition-colors duration-100";
                 statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all duration-100";
-                instructionTitle.textContent = etapa === 1 ? "Aguardando NR..." : "Aguardando Volume...";
-                instructionSub.innerHTML = etapa === 1 ?
-                    "Bipe a etiqueta <strong>NR</strong>" :
-                    "Bipe a etiqueta de <strong>Volume</strong>";
+
+                // ✅ RESETA A ETAPA PARA 1 (AGUARDANDO NR)
+                etapa = 1;
+                nrAtual = '';
+
+                instructionTitle.textContent = "Aguardando Leitura...";
+                instructionSub.innerHTML = "Bipe a etiqueta <strong>NR</strong>";
                 errorDetails.classList.add('hidden');
                 clienteInfo.classList.add('hidden');
                 matchInfo.classList.add('hidden');
                 timeoutFeedback = null;
 
-                if (etapa === 1) {
-                    scanMessage.textContent = '📷 Aponte para a NR';
-                } else {
-                    scanMessage.textContent = '📷 Aponte para o VOLUME';
-                }
+                scanMessage.textContent = '📷 Aponte para a NR';
 
                 if (!scannerAtivo) {
                     iniciarScanner();
