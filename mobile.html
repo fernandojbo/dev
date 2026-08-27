@@ -46,22 +46,33 @@
             transform: translate(-50%, -50%);
             width: 80%;
             height: 30%;
-            border: 3px solid rgba(251, 191, 36, 0.6);
+            border: 3px solid rgba(251, 191, 36, 0.4);
             border-radius: 12px;
             pointer-events: none;
-            box-shadow: 0 0 30px rgba(251, 191, 36, 0.15);
-            animation: pulse-border 1.5s ease-in-out infinite;
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.1);
+            transition: all 0.3s ease;
         }
 
-        @keyframes pulse-border {
+        #scan-overlay.active {
+            border-color: rgba(52, 211, 153, 0.8);
+            box-shadow: 0 0 40px rgba(52, 211, 153, 0.3);
+            animation: pulse-scan 0.5s ease-in-out 2;
+        }
+
+        #scan-overlay.error {
+            border-color: rgba(239, 68, 68, 0.8);
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.3);
+        }
+
+        @keyframes pulse-scan {
             0%,
             100% {
-                border-color: rgba(251, 191, 36, 0.4);
-                box-shadow: 0 0 20px rgba(251, 191, 36, 0.1);
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
             }
             50% {
-                border-color: rgba(251, 191, 36, 0.9);
-                box-shadow: 0 0 40px rgba(251, 191, 36, 0.3);
+                transform: translate(-50%, -50%) scale(1.05);
+                opacity: 0.8;
             }
         }
 
@@ -106,10 +117,11 @@
             transform: translateX(-50%);
             background: rgba(251, 191, 36, 0.2);
             border: 1px solid rgba(251, 191, 36, 0.3);
-            padding: 8px 20px;
+            padding: 10px 24px;
             border-radius: 30px;
             color: #fbbf24;
-            font-size: 12px;
+            font-size: 14px;
+            font-weight: bold;
             pointer-events: none;
             backdrop-filter: blur(4px);
             white-space: nowrap;
@@ -135,10 +147,36 @@
             height: 1px;
         }
 
-        /* Indicador de leitura */
-        .scanning-active #scan-overlay {
-            border-color: rgba(52, 211, 153, 0.8);
-            box-shadow: 0 0 40px rgba(52, 211, 153, 0.3);
+        /* Loading da câmera */
+        #camera-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #94a3b8;
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(251, 191, 36, 0.2);
+            border-top: 3px solid #fbbf24;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -163,10 +201,14 @@
         <!-- Scanner (Câmera) - TOQUE PARA LER -->
         <div id="scanner-container" class="relative">
             <div id="scanner"></div>
+            <div id="camera-loading">
+                <div class="spinner"></div>
+                <span>Iniciando câmera...</span>
+            </div>
             <div id="scan-overlay"></div>
             <div id="codigo-lido"></div>
-            <div id="scan-tap">👆 Toque para ler o código</div>
-            <div id="scan-message">📷 Aponte para o código de barras</div>
+            <div id="scan-tap">👆 Toque para ler</div>
+            <div id="scan-message">📷 Aponte para o código</div>
         </div>
 
         <!-- Status Box (feedback visual) -->
@@ -332,8 +374,7 @@
         let timeoutFeedback = null;
         let tentativasValidacao = 0;
         let scannerAtivo = false;
-        let ultimoCodigoLido = '';
-        let ultimoCodigoTimestamp = 0;
+        let leituraAtiva = false;
 
 
         // ==========================================================
@@ -357,6 +398,8 @@
         const scanMessage = document.getElementById('scan-message');
         const scanContainer = document.getElementById('scanner-container');
         const scanTap = document.getElementById('scan-tap');
+        const scanOverlay = document.getElementById('scan-overlay');
+        const cameraLoading = document.getElementById('camera-loading');
 
 
         // ==========================================================
@@ -398,7 +441,7 @@
             });
 
             // ==========================================================
-            // EVENTO DE TOQUE NA TELA PARA LER O CÓDIGO
+            // EVENTO DE TOQUE NA TELA - ATIVA A LEITURA
             // ==========================================================
 
             scanContainer.addEventListener('click', function() {
@@ -407,23 +450,34 @@
                     return;
                 }
 
-                // Pausa a detecção automática e força uma leitura
-                if (scannerAtivo) {
-                    console.log('👆 Toque detectado, lendo código...');
-                    // O Quagga já está rodando, então apenas forçamos a verificação
-                    // A leitura será feita pelo callback onDetected
-                    // Mas vamos dar um feedback visual
-                    scanContainer.classList.add('scanning-active');
-                    scanTap.textContent = '📸 Lendo...';
-                    scanTap.style.color = '#22c55e';
-
-                    // Se não houver código detectado em 1 segundo, volta ao normal
-                    setTimeout(() => {
-                        scanContainer.classList.remove('scanning-active');
-                        scanTap.textContent = '👆 Toque para ler o código';
-                        scanTap.style.color = '#fbbf24';
-                    }, 1000);
+                if (!scannerAtivo) {
+                    console.log('⚠️ Scanner não está ativo. Reiniciando...');
+                    iniciarScanner();
+                    return;
                 }
+
+                // ATIVA A LEITURA POR 1 SEGUNDO
+                leituraAtiva = true;
+                scanOverlay.classList.add('active');
+                scanTap.textContent = '📸 Lendo...';
+                scanTap.style.color = '#22c55e';
+                scanMessage.textContent = '🔍 Lendo código...';
+
+                console.log('👆 Leitura ativada!');
+
+                // Desativa a leitura após 1.5 segundos
+                setTimeout(() => {
+                    leituraAtiva = false;
+                    scanOverlay.classList.remove('active');
+                    scanTap.textContent = '👆 Toque para ler';
+                    scanTap.style.color = '#fbbf24';
+                    if (etapa === 1) {
+                        scanMessage.textContent = '📷 Aponte para a NR';
+                    } else {
+                        scanMessage.textContent = '📷 Aponte para o VOLUME';
+                    }
+                    console.log('⏹️ Leitura desativada');
+                }, 1500);
             });
         });
 
@@ -469,6 +523,7 @@
             }
 
             const container = document.getElementById('scanner');
+            cameraLoading.style.display = 'block';
 
             Quagga.init({
                 inputStream: {
@@ -504,35 +559,40 @@
                 },
                 locate: true
             }, function(err) {
+                cameraLoading.style.display = 'none';
                 if (err) {
                     console.error('❌ Erro ao iniciar scanner:', err);
-                    scanMessage.textContent = '❌ Erro ao acessar a câmera. Verifique as permissões.';
+                    scanMessage.textContent = '❌ Erro na câmera. Toque para tentar novamente.';
+                    scanTap.textContent = '⚠️ Erro na câmera';
                     return;
                 }
                 scannerAtivo = true;
                 console.log('✅ Scanner iniciado');
                 scanMessage.textContent = '📷 Aponte e toque para ler';
+                scanTap.textContent = '👆 Toque para ler';
                 Quagga.start();
             });
 
             // ==========================================================
-            // DETECÇÃO DE CÓDIGO - COM PROTEÇÃO CONTRA DUPLICIDADE
+            // DETECÇÃO DE CÓDIGO - SÓ FUNCIONA SE A LEITURA ESTIVER ATIVA
             // ==========================================================
 
             Quagga.onDetected(function(result) {
-                const code = result.codeResult.code;
-                const agora = Date.now();
-
-                // ✅ VERIFICA SE É O MESMO CÓDIGO LIDO NOS ÚLTIMOS 2 SEGUNDOS
-                if (code === ultimoCodigoLido && (agora - ultimoCodigoTimestamp) < 2000) {
-                    console.log('⏳ Código duplicado ignorado:', code);
+                // ✅ SÓ PROCESSA SE A LEITURA ESTIVER ATIVA
+                if (!leituraAtiva) {
+                    console.log('⏸️ Leitura inativa, código ignorado');
                     return;
                 }
 
-                ultimoCodigoLido = code;
-                ultimoCodigoTimestamp = agora;
-
+                const code = result.codeResult.code;
                 console.log('📸 Código detectado:', code);
+
+                // Desativa a leitura imediatamente para evitar duplicidade
+                leituraAtiva = false;
+                scanOverlay.classList.remove('active');
+                scanTap.textContent = '👆 Toque para ler';
+                scanTap.style.color = '#fbbf24';
+
                 processarCodigoLido(code);
             });
 
@@ -546,11 +606,16 @@
                         result.boxes.filter(function(box) {
                             return box !== result.box;
                         }).forEach(function(box) {
-                            Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(251, 191, 36, 0.2)", lineWidth: 1 });
+                            Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(251, 191, 36, 0.15)", lineWidth: 1 });
                         });
                     }
                     if (result.box) {
-                        Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(251, 191, 36, 0.8)", lineWidth: 2 });
+                        // Só desenha a caixa se a leitura estiver ativa
+                        if (leituraAtiva) {
+                            Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(52, 211, 153, 0.9)", lineWidth: 2 });
+                        } else {
+                            Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "rgba(251, 191, 36, 0.3)", lineWidth: 1 });
+                        }
                     }
                 }
             });
@@ -816,6 +881,9 @@
                 tocarSom('sucesso');
                 scanMessage.textContent = '✅ Conferido!';
                 scanTap.textContent = '✅ Conferido!';
+                scanOverlay.classList.remove('active');
+                scanOverlay.classList.add('active');
+                setTimeout(() => scanOverlay.classList.remove('active'), 500);
             } else {
                 appBg.className = "bg-red-600 text-white min-h-screen flex flex-col transition-colors duration-100";
                 statusBox.className = "w-full max-w-md p-4 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all duration-100";
@@ -828,6 +896,9 @@
                 tocarSom('erro');
                 scanMessage.textContent = '❌ Erro! Tente novamente';
                 scanTap.textContent = '❌ Tente novamente';
+                scanOverlay.classList.remove('active');
+                scanOverlay.classList.add('error');
+                setTimeout(() => scanOverlay.classList.remove('error'), 800);
             }
 
             const tempoEspera = sucesso ? 400 : 600;
@@ -851,9 +922,10 @@
                 timeoutFeedback = null;
 
                 scanMessage.textContent = '📷 Aponte e toque para ler';
-                scanTap.textContent = '👆 Toque para ler o código';
+                scanTap.textContent = '👆 Toque para ler';
                 scanTap.style.color = '#fbbf24';
-                scanContainer.classList.remove('scanning-active');
+                scanOverlay.classList.remove('active');
+                scanOverlay.classList.remove('error');
 
                 if (!scannerAtivo) {
                     iniciarScanner();
@@ -862,8 +934,8 @@
         }
 
         console.log('📱 Versão Mobile do Sistema de Conferência carregada');
-        console.log('📷 Aponte e toque na tela para ler o código');
-        console.log('🛡️ Proteção contra leituras duplicadas ativada');
+        console.log('📷 Aponte e TOQUE na tela para ler o código');
+        console.log('🛡️ Leitura desativada por padrão, ativada apenas no toque');
     </script>
 
 </body>
