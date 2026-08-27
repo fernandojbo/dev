@@ -340,7 +340,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR
+        // FUNÇÃO PARA IMPORTAR (COM UPSERT)
         // ==========================================================
 
         document.getElementById('btnImportar').addEventListener('click', async function() {
@@ -365,17 +365,45 @@
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
             try {
+                // 🔥 UPSERT: insere ou atualiza baseado na coluna 'nr'
                 const { data: resultado, error } = await window.supabaseClient
                     .from('conferencia')
-                    .insert(dadosParsed);
+                    .upsert(dadosParsed, { 
+                        onConflict: 'nr',   // Coluna usada para verificar duplicata
+                        ignoreDuplicates: false  // Atualiza se existir
+                    });
 
-                if (error) throw error;
+                if (error) {
+                    console.error('❌ Erro do Supabase:', error);
+                    
+                    // Mensagem mais amigável para erro de chave duplicada
+                    if (error.message && error.message.includes('duplicate key')) {
+                        if (error.message.includes('volume_clie')) {
+                            throw new Error('❌ VOLUME_CLIE já existe na base. Não é permitido duplicar volumes.');
+                        } else if (error.message.includes('nr')) {
+                            throw new Error('❌ NR já existe na base. Não é permitido duplicar NRs.');
+                        } else {
+                            throw new Error('❌ Registro duplicado encontrado. Verifique os dados.');
+                        }
+                    }
+                    throw error;
+                }
 
-                status.textContent = `✅ Importação concluída! ${dadosParsed.length} registros importados.`;
+                // Conta quantos foram inseridos vs atualizados
+                const inserted = resultado?.filter(r => r.created_at === r.updated_at)?.length || 0;
+                const updated = (resultado?.length || 0) - inserted;
+
+                console.log('✅ Importado com sucesso:', resultado);
+                
+                let msg = `✅ Importação concluída! ${dadosParsed.length} registros processados.`;
+                if (inserted > 0) msg += `\n📥 ${inserted} novos inseridos.`;
+                if (updated > 0) msg += `\n🔄 ${updated} atualizados.`;
+                
+                status.textContent = msg;
                 status.className = "mt-4 text-center text-green-400 font-semibold";
             } catch (err) {
                 console.error('❌ Erro ao importar:', err);
-                status.textContent = "❌ Erro ao importar: " + err.message;
+                status.textContent = "❌ " + err.message;
                 status.className = "mt-4 text-center text-red-400 font-semibold";
             } finally {
                 btn.disabled = false;
@@ -384,6 +412,7 @@
 
         console.log('📥 Importador com mapeamento inteligente carregado');
         console.log('🔀 Sinônimos reconhecidos:', sinonimos);
+        console.log('🔄 Importação com UPSERT ativada (NR como chave)');
     </script>
 
 </body>
