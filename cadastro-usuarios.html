@@ -25,10 +25,9 @@
                 <h1 class="text-2xl font-bold text-white">👥 Cadastro de Usuários</h1>
                 <p class="text-slate-400 text-sm">Gerencie os usuários do sistema de conferência</p>
             </div>
-            <a href="login.html" class="text-amber-400 hover:text-amber-300 text-sm">← Voltar ao Login</a>
+            <a href="admin-layout.html" class="text-amber-400 hover:text-amber-300 text-sm">← Voltar</a>
         </header>
 
-        <!-- Formulário de Cadastro -->
         <div class="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-6">
             <h2 class="text-lg font-semibold text-white mb-4">➕ Novo Usuário</h2>
             
@@ -65,7 +64,6 @@
             <div id="form-status" class="mt-3 text-sm hidden"></div>
         </div>
 
-        <!-- Lista de Usuários -->
         <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
             <h2 class="text-lg font-semibold text-white mb-4">📋 Usuários Cadastrados</h2>
             
@@ -81,6 +79,23 @@
     </div>
 
     <script>
+        // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
+
+
         // ==========================================================
         // VARIÁVEIS
         // ==========================================================
@@ -116,7 +131,7 @@
 
 
         // ==========================================================
-        // CARREGAR USUÁRIOS
+        // CARREGAR USUÁRIOS (COM FILTRO DE TENANT)
         // ==========================================================
 
         async function carregarUsuarios() {
@@ -126,10 +141,14 @@
             }
 
             try {
-                const { data: usuarios, error } = await supabaseClient
-                    .from('usuarios')
-                    .select('*')
-                    .order('nome');
+                const tenantId = getTenantId();
+                let query = supabaseClient.from('usuarios').select('*');
+
+                if (tenantId) {
+                    query = query.eq('tenant_id', tenantId);
+                }
+
+                const { data: usuarios, error } = await query.order('nome');
 
                 if (error) throw error;
 
@@ -170,7 +189,7 @@
 
 
         // ==========================================================
-        // CADASTRAR USUÁRIO
+        // CADASTRAR USUÁRIO (COM TENANT)
         // ==========================================================
 
         form.addEventListener('submit', async (e) => {
@@ -201,7 +220,8 @@
             mostrarStatus('', '');
 
             try {
-                // Verifica se o usuário já existe
+                const tenantId = getTenantId();
+
                 const { data: existe, error: checkError } = await supabaseClient
                     .from('usuarios')
                     .select('usuario')
@@ -217,14 +237,15 @@
                     return;
                 }
 
-                // Insere o novo usuário
                 const { data, error } = await supabaseClient
                     .from('usuarios')
                     .insert({
                         nome: nome,
                         usuario: usuario,
                         senha: senha,
+                        role: 'conferente',
                         ativo: true,
+                        tenant_id: tenantId,  // ← ADICIONADO!
                         criado_em: new Date().toISOString()
                     });
 
@@ -232,13 +253,11 @@
 
                 mostrarStatus(`✅ Usuário "${usuario}" cadastrado com sucesso!`, 'text-green-400');
                 
-                // Limpa o formulário
                 nomeInput.value = '';
                 usuarioInput.value = '';
                 senhaInput.value = '';
                 nomeInput.focus();
 
-                // Recarrega a lista
                 carregarUsuarios();
 
             } catch (err) {
