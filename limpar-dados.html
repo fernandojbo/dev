@@ -21,7 +21,6 @@
 
     <div class="max-w-4xl mx-auto">
 
-        <!-- Cabeçalho -->
         <header class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-2xl font-bold text-white">🗑️ Limpar Dados</h1>
@@ -32,7 +31,6 @@
             </a>
         </header>
 
-        <!-- Cards de Resumo -->
         <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
                 <div class="flex items-center justify-between">
@@ -51,12 +49,10 @@
             </div>
         </section>
 
-        <!-- Área de Exclusão -->
         <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
 
             <h2 class="text-lg font-semibold text-white mb-4">🧹 Excluir Registros</h2>
 
-            <!-- Selecionar Tabela -->
             <div class="mb-4">
                 <label class="block text-sm font-medium text-slate-300 mb-1">Selecione a tabela:</label>
                 <div class="flex flex-wrap gap-4">
@@ -75,7 +71,6 @@
                 </div>
             </div>
 
-            <!-- Opções de exclusão -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-1">Filtrar por período:</label>
@@ -101,7 +96,6 @@
                 </div>
             </div>
 
-            <!-- Informação sobre a data atual -->
             <div class="mb-4 p-3 bg-slate-700/30 rounded-lg border border-slate-600">
                 <p class="text-xs text-slate-400">
                     📅 <strong>Data atual (servidor):</strong> 
@@ -113,7 +107,6 @@
                 </p>
             </div>
 
-            <!-- Botões -->
             <div class="flex flex-wrap gap-3 mt-4">
                 <button id="btn-contar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
                     📊 Contar Registros
@@ -126,10 +119,8 @@
                 </button>
             </div>
 
-            <!-- Status -->
             <div id="status-area" class="mt-4 p-3 rounded-lg hidden"></div>
 
-            <!-- Registros encontrados -->
             <div id="registros-encontrados" class="mt-4 hidden">
                 <h3 class="text-sm font-semibold text-slate-300 mb-2">📋 Registros encontrados:</h3>
                 <div id="lista-registros" class="max-h-60 overflow-y-auto space-y-1 text-xs"></div>
@@ -137,7 +128,6 @@
 
         </div>
 
-        <!-- Aviso -->
         <div class="mt-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
             <p class="text-sm text-red-300">
                 ⚠️ <strong>Atenção:</strong> A exclusão de dados é permanente e não pode ser desfeita.
@@ -171,6 +161,23 @@
             }
         }
         const usuario = verificarAdmin();
+
+
+        // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
 
 
         // ==========================================================
@@ -218,7 +225,6 @@
             }
         }
 
-        // Atualiza a info quando mudar o filtro
         document.getElementById('dias-filter').addEventListener('change', atualizarInfoData);
 
 
@@ -230,10 +236,18 @@
             if (!supabaseClient) return;
 
             try {
-                const [conf, log] = await Promise.all([
-                    supabaseClient.from('conferencia').select('*', { count: 'exact', head: true }),
-                    supabaseClient.from('conferencia_log').select('*', { count: 'exact', head: true })
-                ]);
+                const tenantId = getTenantId();
+                
+                // Busca com filtro de tenant
+                let queryConf = supabaseClient.from('conferencia').select('*', { count: 'exact', head: true });
+                let queryLog = supabaseClient.from('conferencia_log').select('*', { count: 'exact', head: true });
+
+                if (tenantId) {
+                    queryConf = queryConf.eq('tenant_id', tenantId);
+                    queryLog = queryLog.eq('tenant_id', tenantId);
+                }
+
+                const [conf, log] = await Promise.all([queryConf, queryLog]);
 
                 contagem.conferencia = conf.count || 0;
                 contagem.log = log.count || 0;
@@ -248,7 +262,6 @@
         function getTabelas() {
             const selected = document.querySelector('input[name="tabela"]:checked');
             if (!selected) return ['conferencia'];
-            
             const value = selected.value;
             if (value === 'ambas') return ['conferencia', 'conferencia_log'];
             return [value];
@@ -261,12 +274,16 @@
         }
 
         function buildQuery(tabela, filtros) {
+            const tenantId = getTenantId();
             let query = supabaseClient.from(tabela).select('*', { count: 'exact' });
             
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
             if (filtros.dias > 0) {
                 const dataLimite = new Date();
                 dataLimite.setDate(dataLimite.getDate() - filtros.dias);
-                // Usa gte (maior ou igual) para pegar registros a partir da data limite
                 query = query.gte('created_at', dataLimite.toISOString());
             }
 
@@ -274,21 +291,23 @@
                 query = query.eq('conferente', filtros.conferente);
             }
 
-            // Limita para não travar
             query = query.limit(1000);
-
             return query;
         }
 
         function buildDeleteQuery(tabela, filtros) {
+            const tenantId = getTenantId();
             let query = supabaseClient.from(tabela).delete();
             
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
             if (filtros.dias > 0) {
                 const dataLimite = new Date();
                 dataLimite.setDate(dataLimite.getDate() - filtros.dias);
                 query = query.gte('created_at', dataLimite.toISOString());
             } else {
-                // Se não tiver filtro de data, exclui todos
                 query = query.neq('id', 0);
             }
 
@@ -325,12 +344,10 @@
                     total += count || 0;
                 }
 
-                // Mostra resultados
                 let html = '';
                 if (total === 0) {
                     html = `<div class="text-center text-slate-400 py-4">📭 Nenhum registro encontrado com os filtros selecionados.</div>`;
                     
-                    // Mostra a data limite para ajudar a entender
                     if (filtros.dias > 0) {
                         const dataLimite = new Date();
                         dataLimite.setDate(dataLimite.getDate() - filtros.dias);
