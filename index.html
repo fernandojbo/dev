@@ -106,7 +106,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO DE LOGIN
+        // FUNÇÃO DE LOGIN (ATUALIZADA COM TENANT_ID)
         // ==========================================================
 
         form.addEventListener('submit', async (e) => {
@@ -134,10 +134,10 @@
                     return;
                 }
 
-                // Busca o usuário no Supabase (incluindo role)
+                // 🔥 BUSCA O USUÁRIO INCLUINDO O tenant_id
                 const { data: usuarios, error } = await supabaseClient
                     .from('usuarios')
-                    .select('id, nome, usuario, role')
+                    .select('id, nome, usuario, role, tenant_id')
                     .eq('usuario', usuario)
                     .eq('senha', senha)
                     .eq('ativo', true)
@@ -155,20 +155,24 @@
                     // ✅ LOGIN REALIZADO COM SUCESSO!
                     console.log('✅ Login realizado:', usuarios);
 
-                    // Salva os dados do usuário no localStorage
+                    // 🔥 SALVA OS DADOS DO USUÁRIO COM O tenant_id
                     const dadosUsuario = {
                         id: usuarios.id,
                         nome: usuarios.nome,
                         usuario: usuarios.usuario,
                         role: usuarios.role || 'conferente',
+                        tenant_id: usuarios.tenant_id || null,
                         login_at: new Date().toISOString()
                     };
                     localStorage.setItem('usuario_logado', JSON.stringify(dadosUsuario));
                     localStorage.setItem('conferente', JSON.stringify({ 
                         nome: usuarios.nome, 
                         usuario: usuarios.usuario,
-                        role: usuarios.role || 'conferente'
+                        role: usuarios.role || 'conferente',
+                        tenant_id: usuarios.tenant_id || null
                     }));
+
+                    console.log('💾 Dados salvos com tenant:', dadosUsuario);
 
                     mostrarStatus('✅ Login realizado! Redirecionando...', 'text-green-400');
 
