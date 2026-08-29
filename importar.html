@@ -39,14 +39,19 @@
         #progresso-bar {
             transition: width 0.3s ease;
         }
+        .scroll-detalhes {
+            max-height: 400px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
 
-    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-slate-700">
+    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-3xl border border-slate-700">
         <h2 class="text-2xl font-bold mb-2 text-white">📥 Importar Dados</h2>
         <p class="text-slate-400 text-sm mb-6">
             Selecione o arquivo e indique quais colunas correspondem aos dados do sistema.
+            <span class="text-emerald-400 block mt-1">✅ NR e VOLUME_CLIE são únicos. Registros duplicados serão rejeitados.</span>
         </p>
 
         <!-- Upload do arquivo -->
@@ -129,7 +134,7 @@
         <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
         
         <!-- Área de detalhes da importação -->
-        <div id="detalhes-importacao" class="hidden mt-4 max-h-60 overflow-y-auto space-y-1"></div>
+        <div id="detalhes-importacao" class="hidden mt-4 scroll-detalhes space-y-1"></div>
     </div>
 
     <script>
@@ -141,6 +146,22 @@
         let colunasArquivo = [];
         let dadosParsed = [];
         let mapeamentoSalvo = {};
+
+        // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
 
         // ==========================================================
         // MAPEAMENTO DE SINÔNIMOS
@@ -366,7 +387,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR (EM LOTES - RÁPIDO)
+        // FUNÇÃO PARA IMPORTAR (EM LOTES - COM TENANT)
         // ==========================================================
 
         document.getElementById('btnImportar').addEventListener('click', async function() {
@@ -398,25 +419,39 @@
             detalhesDiv.classList.remove('hidden');
             progressoArea.classList.remove('hidden');
 
-            const total = dadosParsed.length;
-            const TAMANHO_LOTE = 100; // 100 registros por lote
+            // 🔥 OBTÉM O TENANT DO USUÁRIO LOGADO
+            const tenantId = getTenantId();
+            if (!tenantId) {
+                status.textContent = "❌ Usuário não tem tenant associado. Contate o administrador.";
+                status.className = "mt-4 text-center text-sm font-semibold text-red-400";
+                btn.disabled = false;
+                return;
+            }
+
+            // 🔥 ADICIONA TENANT_ID EM CADA REGISTRO
+            const dadosComTenant = dadosParsed.map(row => ({
+                ...row,
+                tenant_id: tenantId
+            }));
+
+            const total = dadosComTenant.length;
+            const TAMANHO_LOTE = 100;
             const lotes = [];
             
-            // Divide em lotes
             for (let i = 0; i < total; i += TAMANHO_LOTE) {
-                lotes.push(dadosParsed.slice(i, i + TAMANHO_LOTE));
+                lotes.push(dadosComTenant.slice(i, i + TAMANHO_LOTE));
             }
 
             let inseridos = 0;
             let atualizados = 0;
             let erros = [];
+            let sucessos = [];
             let processados = 0;
 
             for (let l = 0; l < lotes.length; l++) {
                 const lote = lotes[l];
                 
                 try {
-                    // Tenta importar o lote inteiro
                     const { data, error } = await window.supabaseClient
                         .from('conferencia')
                         .upsert(lote, { 
@@ -427,7 +462,6 @@
                     processados += lote.length;
 
                     if (error) {
-                        // Se o lote inteiro falhou, tenta um por um para identificar os erros
                         console.warn(`⚠️ Lote ${l+1} falhou, processando individualmente...`);
                         
                         for (const registro of lote) {
@@ -440,34 +474,42 @@
                                     });
 
                                 if (rError) {
+                                    let motivo = rError.message || 'Erro desconhecido';
+                                    
                                     if (rError.message && rError.message.includes('volume_clie')) {
-                                        erros.push({
-                                            nr: registro.nr || 'N/A',
-                                            volume: registro.volume_clie || 'N/A',
-                                            motivo: 'VOLUME_CLIE já existe'
-                                        });
+                                        const { data: existente } = await window.supabaseClient
+                                            .from('conferencia')
+                                            .select('nr')
+                                            .eq('volume_clie', registro.volume_clie)
+                                            .eq('tenant_id', tenantId)
+                                            .maybeSingle();
+                                        
+                                        if (existente) {
+                                            motivo = `VOLUME_CLIE já existe na NR ${existente.nr}`;
+                                        } else {
+                                            motivo = 'VOLUME_CLIE já existe na base (NR não identificada)';
+                                        }
                                     } else if (rError.message && rError.message.includes('nr')) {
-                                        erros.push({
-                                            nr: registro.nr || 'N/A',
-                                            volume: registro.volume_clie || 'N/A',
-                                            motivo: 'NR já existe'
-                                        });
-                                    } else {
-                                        erros.push({
-                                            nr: registro.nr || 'N/A',
-                                            volume: registro.volume_clie || 'N/A',
-                                            motivo: rError.message || 'Erro desconhecido'
-                                        });
+                                        motivo = 'NR já existe na base';
                                     }
+                                    
+                                    erros.push({
+                                        nr: registro.nr || 'N/A',
+                                        volume: registro.volume_clie || 'N/A',
+                                        motivo: motivo
+                                    });
                                 } else {
                                     if (rData && rData.length > 0) {
                                         if (rData[0].created_at === rData[0].updated_at) {
                                             inseridos++;
+                                            sucessos.push({ nr: registro.nr, volume: registro.volume_clie, status: 'inserido' });
                                         } else {
                                             atualizados++;
+                                            sucessos.push({ nr: registro.nr, volume: registro.volume_clie, status: 'atualizado' });
                                         }
                                     } else {
                                         inseridos++;
+                                        sucessos.push({ nr: registro.nr, volume: registro.volume_clie, status: 'inserido' });
                                     }
                                 }
                             } catch (err) {
@@ -479,23 +521,23 @@
                             }
                         }
                     } else {
-                        // Lote inteiro deu certo
                         if (data) {
                             data.forEach(item => {
                                 if (item.created_at === item.updated_at) {
                                     inseridos++;
+                                    sucessos.push({ nr: item.nr, volume: item.volume_clie, status: 'inserido' });
                                 } else {
                                     atualizados++;
+                                    sucessos.push({ nr: item.nr, volume: item.volume_clie, status: 'atualizado' });
                                 }
                             });
                         }
                     }
                 } catch (err) {
-                    // Erro no lote, processa individualmente
                     console.warn(`⚠️ Erro no lote ${l+1}, processando individualmente...`);
                     for (const registro of lote) {
                         try {
-                            const { data: rData, error: rError } = await supabaseClient
+                            const { data: rData, error: rError } = await window.supabaseClient
                                 .from('conferencia')
                                 .upsert(registro, { onConflict: 'nr', ignoreDuplicates: false });
 
@@ -507,6 +549,7 @@
                                 });
                             } else {
                                 inseridos++;
+                                sucessos.push({ nr: registro.nr, volume: registro.volume_clie, status: 'inserido' });
                             }
                         } catch (e) {
                             erros.push({
@@ -518,7 +561,6 @@
                     }
                 }
 
-                // Atualiza barra de progresso
                 const progresso = Math.round((processados / total) * 100);
                 progressoBar.style.width = progresso + '%';
                 progressoTexto.textContent = progresso + '%';
@@ -526,52 +568,83 @@
             }
 
             // ==========================================================
-            // RELATÓRIO FINAL
+            // RELATÓRIO FINAL DETALHADO
             // ==========================================================
 
             let msg = `✅ Importação concluída! ${processados} registros processados.`;
             if (inseridos > 0) msg += `\n📥 ${inseridos} novos inseridos.`;
             if (atualizados > 0) msg += `\n🔄 ${atualizados} atualizados.`;
-            if (erros.length > 0) msg += `\n❌ ${erros.length} falhas.`;
+            if (erros.length > 0) msg += `\n❌ ${erros.length} rejeitados.`;
             
             status.textContent = msg;
             status.className = "mt-4 text-center text-sm font-semibold " + 
                 (erros.length > 0 ? "text-yellow-400" : "text-green-400");
 
             // ==========================================================
-            // DETALHES DOS ERROS
+            // DETALHES DOS ERROS E SUCESSOS
             // ==========================================================
 
+            let html = '';
+
+            html += `
+                <div class="grid grid-cols-3 gap-2 mb-3">
+                    <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-2 text-center">
+                        <span class="text-green-400 font-bold text-lg">${inseridos}</span>
+                        <span class="text-green-400 text-xs block">Inseridos</span>
+                    </div>
+                    <div class="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-2 text-center">
+                        <span class="text-yellow-400 font-bold text-lg">${atualizados}</span>
+                        <span class="text-yellow-400 text-xs block">Atualizados</span>
+                    </div>
+                    <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-2 text-center">
+                        <span class="text-red-400 font-bold text-lg">${erros.length}</span>
+                        <span class="text-red-400 text-xs block">Rejeitados</span>
+                    </div>
+                </div>
+            `;
+
             if (erros.length > 0) {
-                detalhesDiv.innerHTML = `
+                html += `
                     <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-2">
                         <p class="text-red-400 font-semibold text-sm">❌ ${erros.length} registros NÃO foram importados:</p>
                     </div>
-                    ${erros.slice(0, 50).map(e => `
+                    ${erros.slice(0, 100).map(e => `
                         <div class="erro-item px-3 py-2 rounded-lg text-xs flex justify-between items-center">
-                            <div>
+                            <div class="flex flex-col">
                                 <span class="font-mono text-slate-300">NR: ${e.nr}</span>
-                                <span class="font-mono text-slate-400 ml-3">VOL: ${e.volume}</span>
+                                <span class="font-mono text-slate-400 text-[10px]">VOL: ${e.volume}</span>
                             </div>
-                            <span class="text-red-400 font-semibold">${e.motivo}</span>
+                            <span class="text-red-400 font-semibold text-right max-w-[200px]">${e.motivo}</span>
                         </div>
                     `).join('')}
-                    ${erros.length > 50 ? `<div class="text-xs text-slate-500 text-center py-2">... e mais ${erros.length - 50} erros</div>` : ''}
-                `;
-            } else {
-                detalhesDiv.innerHTML = `
-                    <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
-                        <p class="text-green-400 font-semibold text-sm">✅ Todos os ${processados} registros foram importados com sucesso!</p>
-                    </div>
+                    ${erros.length > 100 ? `<div class="text-xs text-slate-500 text-center py-2">... e mais ${erros.length - 100} erros</div>` : ''}
                 `;
             }
 
+            if (sucessos.length > 0 && erros.length > 0) {
+                html += `
+                    <div class="mt-3 bg-green-900/20 border border-green-500/30 rounded-lg p-3 mb-2">
+                        <p class="text-green-400 font-semibold text-sm">✅ ${sucessos.length} registros importados com sucesso:</p>
+                    </div>
+                    ${sucessos.slice(0, 10).map(s => `
+                        <div class="sucesso-item px-3 py-2 rounded-lg text-xs flex justify-between items-center">
+                            <span class="font-mono text-slate-300">NR: ${s.nr}</span>
+                            <span class="font-mono text-slate-400">VOL: ${s.volume}</span>
+                            <span class="text-green-400 font-semibold">${s.status === 'inserido' ? '📥 Inserido' : '🔄 Atualizado'}</span>
+                        </div>
+                    `).join('')}
+                    ${sucessos.length > 10 ? `<div class="text-xs text-slate-500 text-center py-2">... e mais ${sucessos.length - 10} sucessos</div>` : ''}
+                `;
+            }
+
+            detalhesDiv.innerHTML = html;
             btn.disabled = false;
         });
 
-        console.log('📥 Importador com processamento em lotes carregado');
+        console.log('📥 Importador com isolamento por tenant carregado');
         console.log('🔀 Sinônimos reconhecidos:', sinonimos);
         console.log('⚡ Processamento em lotes de 100 registros');
+        console.log('🔒 Cada usuário vê apenas seus dados (tenant_id)');
     </script>
 
 </body>
