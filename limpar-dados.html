@@ -174,6 +174,23 @@
 
 
         // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
+
+
+        // ==========================================================
         // VARIÁVEIS
         // ==========================================================
 
@@ -230,10 +247,17 @@
             if (!supabaseClient) return;
 
             try {
-                const [conf, log] = await Promise.all([
-                    supabaseClient.from('conferencia').select('*', { count: 'exact', head: true }),
-                    supabaseClient.from('conferencia_log').select('*', { count: 'exact', head: true })
-                ]);
+                const tenantId = getTenantId();
+                
+                let queryConf = supabaseClient.from('conferencia').select('*', { count: 'exact', head: true });
+                let queryLog = supabaseClient.from('conferencia_log').select('*', { count: 'exact', head: true });
+
+                if (tenantId) {
+                    queryConf = queryConf.eq('tenant_id', tenantId);
+                    queryLog = queryLog.eq('tenant_id', tenantId);
+                }
+
+                const [conf, log] = await Promise.all([queryConf, queryLog]);
 
                 contagem.conferencia = conf.count || 0;
                 contagem.log = log.count || 0;
@@ -261,12 +285,16 @@
         }
 
         function buildQuery(tabela, filtros) {
+            const tenantId = getTenantId();
             let query = supabaseClient.from(tabela).select('*', { count: 'exact' });
             
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
             if (filtros.dias > 0) {
                 const dataLimite = new Date();
                 dataLimite.setDate(dataLimite.getDate() - filtros.dias);
-                // Usa gte (maior ou igual) para pegar registros a partir da data limite
                 query = query.gte('created_at', dataLimite.toISOString());
             }
 
@@ -274,21 +302,23 @@
                 query = query.eq('conferente', filtros.conferente);
             }
 
-            // Limita para não travar
             query = query.limit(1000);
-
             return query;
         }
 
         function buildDeleteQuery(tabela, filtros) {
+            const tenantId = getTenantId();
             let query = supabaseClient.from(tabela).delete();
             
+            if (tenantId) {
+                query = query.eq('tenant_id', tenantId);
+            }
+
             if (filtros.dias > 0) {
                 const dataLimite = new Date();
                 dataLimite.setDate(dataLimite.getDate() - filtros.dias);
                 query = query.gte('created_at', dataLimite.toISOString());
             } else {
-                // Se não tiver filtro de data, exclui todos
                 query = query.neq('id', 0);
             }
 
@@ -325,12 +355,10 @@
                     total += count || 0;
                 }
 
-                // Mostra resultados
                 let html = '';
                 if (total === 0) {
                     html = `<div class="text-center text-slate-400 py-4">📭 Nenhum registro encontrado com os filtros selecionados.</div>`;
                     
-                    // Mostra a data limite para ajudar a entender
                     if (filtros.dias > 0) {
                         const dataLimite = new Date();
                         dataLimite.setDate(dataLimite.getDate() - filtros.dias);
@@ -477,6 +505,7 @@
         setTimeout(carregarContagens, 1000);
 
         console.log('🗑️ Painel de limpeza de dados iniciado');
+        console.log('🔒 Filtro por tenant ativo');
     </script>
 
 </body>
