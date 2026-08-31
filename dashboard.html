@@ -145,8 +145,12 @@
         function getTenantId() {
             try {
                 const usuarioSalvo = localStorage.getItem('usuario_logado');
-                if (!usuarioSalvo) return null;
+                if (!usuarioSalvo) {
+                    console.warn('⚠️ Nenhum usuário logado');
+                    return null;
+                }
                 const dados = JSON.parse(usuarioSalvo);
+                console.log('🔍 Tenant do usuário:', dados.tenant_id);
                 return dados.tenant_id || null;
             } catch (e) {
                 console.error('❌ Erro ao obter tenant:', e);
@@ -207,28 +211,39 @@
 
             try {
                 const tenantId = getTenantId();
+                
+                console.log('🔍 Tenant ID:', tenantId);
+                
                 let query = supabaseClient
                     .from('conferencia_log')
                     .select('*');
 
+                // 🔥 FILTRA PELO TENANT
                 if (tenantId) {
                     query = query.eq('tenant_id', tenantId);
+                    console.log('🔍 Filtrando por tenant:', tenantId);
+                } else {
+                    console.warn('⚠️ Nenhum tenant encontrado, mostrando todos os dados (modo admin master?)');
                 }
 
                 const { data: logs, error } = await query
                     .order('created_at', { ascending: false })
                     .limit(500);
 
-                if (error) throw error;
+                if (error) {
+                    console.error('❌ Erro ao buscar logs:', error);
+                    throw error;
+                }
+
+                console.log(`📊 ${logs?.length || 0} registros carregados`);
 
                 if (!logs || logs.length === 0) {
-                    document.getElementById('footer-info').textContent = '📭 Nenhum registro encontrado';
+                    document.getElementById('footer-info').textContent = '📭 Nenhum registro encontrado para este tenant';
                     limparDados();
                     return;
                 }
 
                 dadosCompletos = logs;
-                console.log(`📊 ${logs.length} registros carregados`);
 
                 // Aplica filtro se houver
                 let dadosFiltrados = logs;
@@ -476,7 +491,6 @@
                                     color: '#cbd5e1', 
                                     font: { size: 9 },
                                     onClick: function(e, legendItem) {
-                                        // Filtra ao clicar no nome do conferente na legenda
                                         const nome = legendItem.text;
                                         if (nome && nome !== 'Sem dados') {
                                             aplicarFiltroConferente(nome);
@@ -485,7 +499,6 @@
                                 }
                             }
                         },
-                        // Click no gráfico (nas fatias)
                         onClick: function(e, elements) {
                             if (elements.length > 0) {
                                 const index = elements[0].index;
@@ -507,7 +520,6 @@
 
         function aplicarFiltroConferente(nome) {
             if (filtroConferente === nome) {
-                // Se já está filtrando por este conferente, limpa o filtro
                 filtroConferente = null;
                 document.getElementById('btn-limpar-filtro').classList.add('hidden');
                 document.getElementById('filtro-conferente').textContent = '';
