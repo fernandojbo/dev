@@ -82,6 +82,23 @@
 
     <script>
         // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
+
+
+        // ==========================================================
         // VARIÁVEIS
         // ==========================================================
 
@@ -116,7 +133,7 @@
 
 
         // ==========================================================
-        // CARREGAR USUÁRIOS
+        // CARREGAR USUÁRIOS (COM FILTRO DE TENANT)
         // ==========================================================
 
         async function carregarUsuarios() {
@@ -126,10 +143,14 @@
             }
 
             try {
-                const { data: usuarios, error } = await supabaseClient
-                    .from('usuarios')
-                    .select('*')
-                    .order('nome');
+                const tenantId = getTenantId();
+                let query = supabaseClient.from('usuarios').select('*');
+
+                if (tenantId) {
+                    query = query.eq('tenant_id', tenantId);
+                }
+
+                const { data: usuarios, error } = await query.order('nome');
 
                 if (error) throw error;
 
@@ -147,6 +168,7 @@
                             <span class="font-medium text-white">${u.nome}</span>
                             <span class="text-slate-400 text-sm ml-2">(@${u.usuario})</span>
                             ${u.ativo === false ? '<span class="text-red-400 text-xs ml-2">🚫 Inativo</span>' : ''}
+                            ${u.role === 'admin' ? '<span class="text-amber-400 text-xs ml-2">👑 Admin</span>' : ''}
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="text-xs text-slate-500">${new Date(u.criado_em).toLocaleDateString('pt-BR')}</span>
@@ -170,7 +192,7 @@
 
 
         // ==========================================================
-        // CADASTRAR USUÁRIO
+        // CADASTRAR USUÁRIO (COM TENANT)
         // ==========================================================
 
         form.addEventListener('submit', async (e) => {
@@ -217,14 +239,19 @@
                     return;
                 }
 
-                // Insere o novo usuário
+                // 🔥 OBTÉM O TENANT DO USUÁRIO LOGADO
+                const tenantId = getTenantId();
+
+                // Insere o novo usuário com tenant_id
                 const { data, error } = await supabaseClient
                     .from('usuarios')
                     .insert({
                         nome: nome,
                         usuario: usuario,
                         senha: senha,
+                        role: 'conferente',
                         ativo: true,
+                        tenant_id: tenantId,
                         criado_em: new Date().toISOString()
                     });
 
