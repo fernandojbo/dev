@@ -139,6 +139,23 @@
 
 
         // ==========================================================
+        // FUNÇÃO PARA OBTER O TENANT DO USUÁRIO LOGADO
+        // ==========================================================
+
+        function getTenantId() {
+            try {
+                const usuarioSalvo = localStorage.getItem('usuario_logado');
+                if (!usuarioSalvo) return null;
+                const dados = JSON.parse(usuarioSalvo);
+                return dados.tenant_id || null;
+            } catch (e) {
+                console.error('❌ Erro ao obter tenant:', e);
+                return null;
+            }
+        }
+
+
+        // ==========================================================
         // VARIÁVEIS GLOBAIS
         // ==========================================================
 
@@ -179,7 +196,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA CARREGAR DADOS
+        // FUNÇÃO PARA CARREGAR DADOS (COM FILTRO DE TENANT)
         // ==========================================================
 
         async function carregarDados() {
@@ -189,9 +206,16 @@
             }
 
             try {
-                const { data: logs, error } = await supabaseClient
+                const tenantId = getTenantId();
+                let query = supabaseClient
                     .from('conferencia_log')
-                    .select('*')
+                    .select('*');
+
+                if (tenantId) {
+                    query = query.eq('tenant_id', tenantId);
+                }
+
+                const { data: logs, error } = await query
                     .order('created_at', { ascending: false })
                     .limit(500);
 
@@ -507,6 +531,7 @@
 
         console.log('📊 Dashboard interativo iniciado');
         console.log('💡 Clique em um conferente no gráfico ou na legenda para filtrar');
+        console.log('🔒 Filtro por tenant ativo');
     </script>
 
 </body>
