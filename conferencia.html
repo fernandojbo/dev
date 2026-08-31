@@ -164,11 +164,15 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA SALVAR LOG DA CONFERÊNCIA
+        // FUNÇÃO PARA SALVAR LOG DA CONFERÊNCIA (COM TENANT_ID)
         // ==========================================================
 
         async function salvarLogConferencia(dados) {
             try {
+                // 🔥 PEGA O TENANT_ID DO USUÁRIO LOGADO
+                const usuarioLogado = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
+                const tenantId = usuarioLogado.tenant_id || null;
+
                 await supabaseClient
                     .from('conferencia_log')
                     .insert({
@@ -177,6 +181,7 @@
                         conferente: dados.conferente,
                         status: dados.status,
                         mensagem: dados.mensagem || null,
+                        tenant_id: tenantId,  // ← ADICIONADO!
                         created_at: new Date().toISOString()
                     });
             } catch (err) {
